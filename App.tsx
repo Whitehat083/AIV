@@ -3,25 +3,10 @@ import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, Ha
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
+import OnboardingTour from './pages/OnboardingTour';
 import { getTodayDateString } from './utils/dateUtils';
 
-// Initial mock data for new users
-const initialAppointments: Appointment[] = [
-    { id: '1', title: 'Reunião de equipe', date: new Date().toISOString(), duration: 60, location: 'Online' },
-];
-const initialTasks: Task[] = [
-    { id: '1', title: 'Finalizar relatório', completed: false, priority: 'high', category: 'Trabalho', dueDate: new Date().toISOString() },
-    { id: '2', title: 'Enviar e-mails de follow-up', completed: false, priority: 'medium', category: 'Trabalho' },
-    { id: '3', title: 'Agendar consulta médica', completed: true, priority: 'high', category: 'Pessoal', completedAt: new Date(Date.now() - 86400000).toISOString() },
-];
-const initialGoals: Goal[] = [
-    { id: '1', name: 'Juntar R$5.000 para viagem', category: 'Financeiro', progressUnit: 'Dinheiro (R$)', targetValue: 5000, currentProgress: 1500, deadline: new Date(new Date().getFullYear(), 11, 31).toISOString() },
-];
-
-
 const App: React.FC = () => {
-  const [activePage, setActivePage] = useState<Page>(Page.Dashboard);
-
   // Helper to get state from localStorage
   const getInitialState = <T,>(key: string, defaultValue: T): T => {
     try {
@@ -35,8 +20,9 @@ const App: React.FC = () => {
 
   // App State
   const [user, setUser] = useState<User | null>(() => getInitialState('aiv-user', null));
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(() => getInitialState('aiv-isOnboarded', false));
+  const [isTourCompleted, setIsTourCompleted] = useState<boolean>(() => getInitialState('aiv-isTourCompleted', false));
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => getInitialState('aiv-isDarkMode', false));
+  const [activePage, setActivePage] = useState<Page>(Page.Dashboard);
 
   // Data State
   const [appointments, setAppointments] = useState<Appointment[]>(() => getInitialState('aiv-appointments', []));
@@ -50,7 +36,7 @@ const App: React.FC = () => {
   // Persist state to localStorage
   useEffect(() => {
     localStorage.setItem('aiv-user', JSON.stringify(user));
-    localStorage.setItem('aiv-isOnboarded', JSON.stringify(isOnboarded));
+    localStorage.setItem('aiv-isTourCompleted', JSON.stringify(isTourCompleted));
     localStorage.setItem('aiv-isDarkMode', JSON.stringify(isDarkMode));
     localStorage.setItem('aiv-appointments', JSON.stringify(appointments));
     localStorage.setItem('aiv-tasks', JSON.stringify(tasks));
@@ -59,7 +45,7 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-transactions', JSON.stringify(transactions));
     localStorage.setItem('aiv-goals', JSON.stringify(goals));
     localStorage.setItem('aiv-healthData', JSON.stringify(healthData));
-  }, [user, isOnboarded, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData]);
+  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData]);
   
   // Dark mode effect
   useEffect(() => {
@@ -70,15 +56,21 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
   
-  const handleOnboardingComplete = (userData: User) => {
+  const handleUserRegistration = (userData: User) => {
     setUser(userData);
-    // Give user some initial data to see how the app works, but start habits from scratch.
-    setAppointments(initialAppointments);
-    setTasks(initialTasks);
+    // Clear all data to ensure a fresh start for the tour
+    setAppointments([]);
+    setTasks([]);
     setHabits([]);
     setHabitLogs([]);
-    setGoals(initialGoals);
-    setIsOnboarded(true);
+    setTransactions([]);
+    setGoals([]);
+    setHealthData({ steps: 0, sleep: 0, water: 0 });
+    setIsTourCompleted(false); // Ensure tour starts after registration
+  };
+
+  const handleTourComplete = () => {
+    setIsTourCompleted(true);
   };
   
   const toggleDarkMode = useCallback(() => {
@@ -189,8 +181,22 @@ const App: React.FC = () => {
     return [...reminders, ...tasksOnAgenda];
   }, [goals, tasks]);
 
-  if (!isOnboarded) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (!user) {
+    return <Onboarding onRegister={handleUserRegistration} />;
+  }
+
+  if (!isTourCompleted) {
+    return (
+      <OnboardingTour
+        user={user}
+        onComplete={handleTourComplete}
+        addGoal={addGoal}
+        addHabit={addHabit}
+        addTask={addTask}
+        updateHealthData={updateHealthData}
+        addTransaction={addTransaction}
+      />
+    );
   }
 
   const ActivePageComponent = PAGE_COMPONENTS[activePage];

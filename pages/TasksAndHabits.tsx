@@ -52,12 +52,13 @@ const TasksAndHabits: React.FC<PageProps> = (props) => {
     const handleTaskSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
+        const dueDateValue = formData.get('dueDate') as string;
         const taskData = {
             title: formData.get('title') as string,
-            description: formData.get('description') as string | undefined,
-            category: formData.get('category') as string | undefined,
+            description: formData.get('description') as string || undefined,
+            category: formData.get('category') as string || undefined,
             priority: formData.get('priority') as 'high' | 'medium' | 'low',
-            dueDate: formData.get('dueDate') ? new Date(formData.get('dueDate') as string).toISOString() : undefined,
+            dueDate: dueDateValue ? new Date(dueDateValue).toISOString() : undefined,
         };
         if (editingTask) {
             updateTask({ ...editingTask, ...taskData });
@@ -66,6 +67,20 @@ const TasksAndHabits: React.FC<PageProps> = (props) => {
         }
         setIsTaskModalOpen(false);
         setEditingTask(null);
+    };
+
+    const formatForDateTimeInput = (isoString?: string) => {
+        if (!isoString) return "";
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return "";
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
     // --- Habit Modal Handlers ---
@@ -258,7 +273,7 @@ const TasksAndHabits: React.FC<PageProps> = (props) => {
                                           <div className="flex items-center justify-center gap-4 mt-3">
                                               <button onClick={() => logHabitProgress(habit.id, Math.max(0, progress - 1), todayStr)} className="text-xl font-bold w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600">-</button>
                                               <span className="text-sm text-gray-600 dark:text-gray-300 font-semibold">{progress} / {habit.dailyGoal} {habit.progressUnit?.split(' ')[0]}</span>
-                                              <button onClick={() => logHabitProgress(habit.id, Math.min(habit.dailyGoal, progress + 1), todayStr)} className="text-xl font-bold w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600">+</button>
+                                              <button onClick={() => logHabitProgress(habit.id, Math.min(habit.dailyGoal || Infinity, progress + 1), todayStr)} className="text-xl font-bold w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600">+</button>
                                           </div>
                                         </>
                                       ) : (
@@ -311,8 +326,38 @@ const TasksAndHabits: React.FC<PageProps> = (props) => {
             {/* Task Modal */}
             <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? "Editar Tarefa" : "Nova Tarefa"}>
                 <form onSubmit={handleTaskSubmit} className="space-y-4">
-                    {/* Form fields from previous implementation */}
-                    <button type="submit">{editingTask ? 'Salvar Alterações' : 'Adicionar Tarefa'}</button>
+                    <div>
+                        <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
+                        <input type="text" name="title" id="title" defaultValue={editingTask?.title || ''} required className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                    </div>
+                    <div>
+                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descrição (Opcional)</label>
+                        <textarea name="description" id="description" rows={2} defaultValue={editingTask?.description || ''} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600"></textarea>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Categoria</label>
+                            <input type="text" name="category" id="category" defaultValue={editingTask?.category || ''} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                        </div>
+                        <div>
+                            <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prioridade</label>
+                            <select name="priority" id="priority" defaultValue={editingTask?.priority || 'medium'} required className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
+                                <option value="low">Baixa</option>
+                                <option value="medium">Média</option>
+                                <option value="high">Alta</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data de Conclusão (Opcional)</label>
+                        <input type="datetime-local" name="dueDate" id="dueDate" defaultValue={formatForDateTimeInput(editingTask?.dueDate)} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                    </div>
+                    <div className="flex justify-end pt-4">
+                        <button type="button" onClick={() => setIsTaskModalOpen(false)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 mr-2">Cancelar</button>
+                        <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                            {editingTask ? 'Salvar Alterações' : 'Adicionar Tarefa'}
+                        </button>
+                    </div>
                 </form>
             </Modal>
             
