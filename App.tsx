@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog } from './types';
+import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
 import OnboardingTour from './pages/OnboardingTour';
+import MoodCheckinModal from './components/MoodCheckinModal';
 import { getTodayDateString } from './utils/dateUtils';
+import { generateMotivationalQuote } from './services/geminiService';
 
 const App: React.FC = () => {
   // Helper to get state from localStorage
@@ -23,6 +25,7 @@ const App: React.FC = () => {
   const [isTourCompleted, setIsTourCompleted] = useState<boolean>(() => getInitialState('aiv-isTourCompleted', false));
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => getInitialState('aiv-isDarkMode', false));
   const [activePage, setActivePage] = useState<Page>(Page.Dashboard);
+  const [showMoodCheckin, setShowMoodCheckin] = useState<boolean>(false);
 
   // Data State
   const [appointments, setAppointments] = useState<Appointment[]>(() => getInitialState('aiv-appointments', []));
@@ -32,6 +35,13 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(() => getInitialState('aiv-transactions', []));
   const [goals, setGoals] = useState<Goal[]>(() => getInitialState('aiv-goals', []));
   const [healthData, setHealthData] = useState<HealthData>(() => getInitialState('aiv-healthData', { steps: 0, sleep: 0, water: 0 }));
+  
+  // Wellbeing Module State
+  const [moodLogs, setMoodLogs] = useState<MoodLog[]>(() => getInitialState('aiv-moodLogs', []));
+  const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallenge | null>(() => getInitialState('aiv-weeklyChallenge', null));
+  const [badges, setBadges] = useState<Badge[]>(() => getInitialState('aiv-badges', []));
+  const [motivationalQuote, setMotivationalQuote] = useState<{ quote: string, date: string }>(() => getInitialState('aiv-quote', { quote: 'Vamos fazer de hoje um ótimo dia!', date: '' }));
+
 
   // Persist state to localStorage
   useEffect(() => {
@@ -45,7 +55,11 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-transactions', JSON.stringify(transactions));
     localStorage.setItem('aiv-goals', JSON.stringify(goals));
     localStorage.setItem('aiv-healthData', JSON.stringify(healthData));
-  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData]);
+    localStorage.setItem('aiv-moodLogs', JSON.stringify(moodLogs));
+    localStorage.setItem('aiv-weeklyChallenge', JSON.stringify(weeklyChallenge));
+    localStorage.setItem('aiv-badges', JSON.stringify(badges));
+    localStorage.setItem('aiv-quote', JSON.stringify(motivationalQuote));
+  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote]);
   
   // Dark mode effect
   useEffect(() => {
@@ -56,6 +70,46 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
   
+  // --- Wellbeing Module Effects ---
+  useEffect(() => {
+    // Show mood check-in once per day
+    if (user && isTourCompleted) {
+        const todayStr = getTodayDateString(new Date());
+        const hasLoggedToday = moodLogs.some(log => log.date === todayStr);
+        if (!hasLoggedToday) {
+            setShowMoodCheckin(true);
+        }
+    }
+
+    // Check and generate weekly challenge
+    if(habits.length > 0 && (!weeklyChallenge || new Date().getDay() === 1 && weeklyChallenge.startDate !== getTodayDateString(new Date()))){
+        const randomHabit = habits[Math.floor(Math.random() * habits.length)];
+        const newChallenge: WeeklyChallenge = {
+            id: crypto.randomUUID(),
+            habitId: randomHabit.id,
+            description: `Complete o hábito "${randomHabit.name}" 4 vezes esta semana!`,
+            target: 4,
+            progress: 0,
+            startDate: getTodayDateString(new Date()),
+            isCompleted: false,
+        };
+        setWeeklyChallenge(newChallenge);
+    }
+    
+    // Check and generate daily quote
+    const todayStr = getTodayDateString(new Date());
+    if (user && isTourCompleted && motivationalQuote.date !== todayStr) {
+        const latestMood = moodLogs.length > 0 ? moodLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
+        generateMotivationalQuote(latestMood, habits, goals, habitLogs)
+            .then(quote => {
+                setMotivationalQuote({ quote, date: todayStr });
+            })
+            .catch(err => console.error("Failed to generate quote", err));
+    }
+
+  }, [user, isTourCompleted]);
+
+
   const handleUserRegistration = (userData: User) => {
     setUser(userData);
     // Clear all data to ensure a fresh start for the tour
@@ -66,6 +120,9 @@ const App: React.FC = () => {
     setTransactions([]);
     setGoals([]);
     setHealthData({ steps: 0, sleep: 0, water: 0 });
+    setMoodLogs([]);
+    setWeeklyChallenge(null);
+    setBadges([]);
     setIsTourCompleted(false); // Ensure tour starts after registration
   };
 
@@ -83,7 +140,6 @@ const App: React.FC = () => {
     setAppointments(prev => [...prev, newAppointment]);
   };
   
-  // --- TASKS ---
   const addTask = (task: Omit<Task, 'id' | 'completed'>) => {
     const newTask = { ...task, id: crypto.randomUUID(), completed: false };
     setTasks(prev => [newTask, ...prev]);
@@ -98,7 +154,6 @@ const App: React.FC = () => {
     setTasks(tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : undefined } : t));
   };
   
-  // --- HABITS ---
   const addHabit = (habit: Omit<Habit, 'id'>) => {
       const newHabit = { ...habit, id: crypto.randomUUID() };
       setHabits(prev => [newHabit, ...prev]);
@@ -112,16 +167,43 @@ const App: React.FC = () => {
         setHabitLogs(logs => logs.filter(l => l.habitId !== habitId)); // Also clear logs
       }
   };
+
   const logHabitProgress = (habitId: string, progress: number, date: string) => {
     const existingLogIndex = habitLogs.findIndex(l => l.habitId === habitId && l.date === date);
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+    
+    const goal = habit.type === 'conclusive' ? 1 : (habit.dailyGoal || 1);
+    const wasCompletedBefore = existingLogIndex > -1 ? habitLogs[existingLogIndex].progress >= goal : false;
+    const isCompletedNow = progress >= goal;
+
     if (existingLogIndex > -1) {
         setHabitLogs(logs => logs.map((log, index) => index === existingLogIndex ? { ...log, progress } : log));
     } else {
         setHabitLogs(logs => [...logs, { habitId, date, progress }]);
     }
+
+    // Update weekly challenge if applicable
+    if (weeklyChallenge && weeklyChallenge.habitId === habitId && !weeklyChallenge.isCompleted) {
+        const completedToday = !wasCompletedBefore && isCompletedNow;
+        if (completedToday) {
+            const newProgress = weeklyChallenge.progress + 1;
+            const isChallengeComplete = newProgress >= weeklyChallenge.target;
+            setWeeklyChallenge({ ...weeklyChallenge, progress: newProgress, isCompleted: isChallengeComplete });
+
+            if (isChallengeComplete) {
+                const newBadge: Badge = {
+                    id: crypto.randomUUID(),
+                    challengeId: weeklyChallenge.id,
+                    name: `Desafio Semanal: ${habit.name}`,
+                    dateEarned: new Date().toISOString(),
+                };
+                setBadges(prev => [...prev, newBadge]);
+            }
+        }
+    }
   };
   
-  // --- OTHERS ---
   const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
     const newTransaction = { ...transaction, id: crypto.randomUUID() };
     setTransactions(prev => [newTransaction, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
@@ -151,6 +233,19 @@ const App: React.FC = () => {
   const deleteGoal = (goalId: string) => {
     setGoals(prevGoals => prevGoals.filter(g => g.id !== goalId));
   };
+  
+  const addMoodLog = (mood: Mood, notes?: string) => {
+    const todayStr = getTodayDateString(new Date());
+    const newLog: MoodLog = { date: todayStr, mood, notes };
+    const existingLogIndex = moodLogs.findIndex(l => l.date === todayStr);
+    if (existingLogIndex > -1) {
+        setMoodLogs(logs => logs.map((log, index) => index === existingLogIndex ? newLog : log));
+    } else {
+        setMoodLogs(logs => [...logs, newLog]);
+    }
+    setShowMoodCheckin(false); // Hide modal after logging
+  };
+
 
   // Create daily reminders for ongoing goals to display on the agenda
   const generatedAppointments = useMemo(() => {
@@ -209,6 +304,10 @@ const App: React.FC = () => {
     transactions,
     goals,
     healthData,
+    moodLogs,
+    weeklyChallenge,
+    badges,
+    motivationalQuote: motivationalQuote.quote,
     isDarkMode,
     setActivePage,
     toggleDarkMode,
@@ -229,10 +328,12 @@ const App: React.FC = () => {
     addGoal,
     updateGoal,
     deleteGoal,
+    addMoodLog,
   };
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
+      {showMoodCheckin && <MoodCheckinModal onSubmit={addMoodLog} onClose={() => setShowMoodCheckin(false)} />}
       <main className="flex-grow pb-24">
         <div className="container mx-auto px-4 py-6">
           <ActivePageComponent {...pageProps} />

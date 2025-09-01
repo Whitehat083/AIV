@@ -2,8 +2,10 @@ import React from 'react';
 import { Page, PageProps } from '../types';
 import Card from '../components/Card';
 import { getTodayDateString } from '../utils/dateUtils';
+import { SparklesIcon } from '../constants';
 
-const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, habitLogs, healthData, goals, setActivePage, toggleTask, logHabitProgress }) => {
+const Dashboard: React.FC<PageProps> = (props) => {
+  const { user, appointments, tasks, habits, habitLogs, healthData, goals, motivationalQuote, weeklyChallenge, setActivePage, toggleTask, logHabitProgress } = props;
   const today = new Date();
   const todayStr = getTodayDateString(today);
 
@@ -31,10 +33,44 @@ const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, hab
         <p className="text-gray-500 dark:text-gray-400">Aqui está um resumo do seu dia.</p>
       </header>
       
+      {/* Wellbeing Card */}
+       <Card className="bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                  <SparklesIcon className="w-8 h-8 text-blue-500 dark:text-blue-400"/>
+              </div>
+              <div className="flex-1">
+                  <h2 className="font-bold text-lg text-blue-800 dark:text-blue-200">Seu Momento de Bem-Estar</h2>
+                  <p className="text-blue-700 dark:text-blue-300 italic mt-1">"{motivationalQuote}"</p>
+                  {weeklyChallenge && !weeklyChallenge.isCompleted && (
+                      <div className="mt-3">
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-300">Desafio da Semana</p>
+                          <div className="flex justify-between items-center text-sm mt-1">
+                              <span className="font-medium">{habits.find(h => h.id === weeklyChallenge.habitId)?.name}</span>
+                              <span className="font-bold">{weeklyChallenge.progress}/{weeklyChallenge.target}</span>
+                          </div>
+                          <div className="w-full bg-blue-100 dark:bg-blue-800 rounded-full h-2 mt-1">
+                              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(weeklyChallenge.progress / weeklyChallenge.target) * 100}%` }}></div>
+                          </div>
+                      </div>
+                  )}
+                  <div className="mt-4 flex gap-2">
+                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
+                          Respirar
+                      </button>
+                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
+                          Ver Diário
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </Card>
+
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Compromissos do Dia */}
-        <Card className="col-span-1 md:col-span-2 lg:col-span-1">
-            <h2 className="font-bold text-lg text-blue-600 dark:text-blue-400 mb-4">Compromissos de Hoje</h2>
+        <Card className="col-span-1 md:col-span-1 lg:col-span-1">
+            <h2 className="font-bold text-lg text-gray-600 dark:text-gray-300 mb-4">Compromissos de Hoje</h2>
             {todayAppointments.length > 0 ? (
                 <ul className="space-y-3">
                     {todayAppointments.slice(0, 3).map(app => (

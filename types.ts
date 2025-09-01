@@ -5,6 +5,7 @@ export enum Page {
   Health = 'Saúde',
   Finances = 'Finanças',
   Goals = 'Metas',
+  Wellbeing = 'Bem-Estar',
   Settings = 'Configurações',
 }
 
@@ -79,6 +80,31 @@ export interface User {
   dob: string;
 }
 
+export type Mood = 'happy' | 'neutral' | 'sad' | 'tired' | 'stressed';
+
+export interface MoodLog {
+    date: string; // YYYY-MM-DD
+    mood: Mood;
+    notes?: string;
+}
+
+export interface WeeklyChallenge {
+    id: string;
+    habitId: string;
+    description: string;
+    target: number;
+    progress: number;
+    startDate: string; // YYYY-MM-DD
+    isCompleted: boolean;
+}
+
+export interface Badge {
+    id: string;
+    challengeId: string;
+    name: string;
+    dateEarned: string; // ISO String
+}
+
 export interface OnboardingTourProps {
   user: User;
   onComplete: () => void;
@@ -98,6 +124,10 @@ export interface PageProps {
   transactions: Transaction[];
   goals: Goal[];
   healthData: HealthData;
+  moodLogs: MoodLog[];
+  weeklyChallenge: WeeklyChallenge | null;
+  badges: Badge[];
+  motivationalQuote: string;
   isDarkMode: boolean;
   setActivePage: (page: Page) => void;
   toggleDarkMode: () => void;
@@ -122,4 +152,6 @@ export interface PageProps {
   addGoal: (goal: Omit<Goal, 'id' | 'currentProgress'>) => void;
   updateGoal: (goalId: string, progress: Partial<Pick<Goal, 'currentProgress'>>) => void;
   deleteGoal: (goalId: string) => void;
+
+  addMoodLog: (mood: Mood, notes?: string) => void;
 }
