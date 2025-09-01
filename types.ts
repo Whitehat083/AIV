@@ -16,21 +16,36 @@ export interface Appointment {
   location?: string;
   description?: string;
   isReminder?: boolean; // Flag for goal reminders
+  isTask?: boolean; // Flag for tasks on agenda
 }
 
 export interface Task {
   id: string;
   title: string;
-  completed: boolean;
-  priority: 'high' | 'medium' | 'low';
+  description?: string;
   category?: string;
+  dueDate?: string;
+  priority: 'high' | 'medium' | 'low';
+  completed: boolean;
+  completedAt?: string;
 }
 
 export interface Habit {
   id: string;
-  title: string;
-  completed: number;
-  goal: number;
+  name: string;
+  description?: string;
+  category: string;
+  frequency: 'daily' | 'weekly';
+  type: 'quantitative' | 'conclusive';
+  // Optional for conclusive habits
+  progressUnit?: 'Tempo (min)' | 'Quantidade' | 'Livre';
+  dailyGoal?: number; 
+}
+
+export interface HabitLog {
+    habitId: string;
+    date: string; // YYYY-MM-DD
+    progress: number;
 }
 
 export interface Transaction {
@@ -43,7 +58,7 @@ export interface Transaction {
 }
 
 export interface Goal {
-  id: string;
+  id:string;
   name: string;
   category: string;
   description?: string;
@@ -69,6 +84,7 @@ export interface PageProps {
   appointments: Appointment[];
   tasks: Task[];
   habits: Habit[];
+  habitLogs: HabitLog[];
   transactions: Transaction[];
   goals: Goal[];
   healthData: HealthData;
@@ -77,11 +93,22 @@ export interface PageProps {
   toggleDarkMode: () => void;
   // Data manipulation functions
   addAppointment: (appointment: Omit<Appointment, 'id'>) => void;
+  
   addTask: (task: Omit<Task, 'id' | 'completed'>) => void;
+  updateTask: (task: Task) => void;
+  deleteTask: (taskId: string) => void;
   toggleTask: (taskId: string) => void;
-  updateHabit: (habitId: string, completed: number) => void;
+  
+  addHabit: (habit: Omit<Habit, 'id'>) => void;
+  updateHabit: (habit: Habit) => void;
+  deleteHabit: (habitId: string) => void;
+  logHabitProgress: (habitId: string, progress: number, date: string) => void;
+
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
+  updateTransaction: (transaction: Transaction) => void;
+  deleteTransaction: (transactionId: string) => void;
   updateHealthData: (data: Partial<HealthData>) => void;
+  
   addGoal: (goal: Omit<Goal, 'id' | 'currentProgress'>) => void;
   updateGoal: (goalId: string, progress: Partial<Pick<Goal, 'currentProgress'>>) => void;
   deleteGoal: (goalId: string) => void;

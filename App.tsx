@@ -1,25 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User } from './types';
+import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
+import { getTodayDateString } from './utils/dateUtils';
 
 // Initial mock data for new users
 const initialAppointments: Appointment[] = [
     { id: '1', title: 'Reunião de equipe', date: new Date().toISOString(), duration: 60, location: 'Online' },
 ];
 const initialTasks: Task[] = [
-    { id: '1', title: 'Finalizar relatório', completed: false, priority: 'high' },
-    { id: '2', title: 'Enviar e-mails de follow-up', completed: false, priority: 'medium' },
-];
-const initialHabits: Habit[] = [
-    { id: '1', title: 'Beber 2L de água', completed: 0, goal: 5 },
-    { id: '2', title: 'Ler 20 páginas', completed: 0, goal: 1 },
+    { id: '1', title: 'Finalizar relatório', completed: false, priority: 'high', category: 'Trabalho', dueDate: new Date().toISOString() },
+    { id: '2', title: 'Enviar e-mails de follow-up', completed: false, priority: 'medium', category: 'Trabalho' },
+    { id: '3', title: 'Agendar consulta médica', completed: true, priority: 'high', category: 'Pessoal', completedAt: new Date(Date.now() - 86400000).toISOString() },
 ];
 const initialGoals: Goal[] = [
     { id: '1', name: 'Juntar R$5.000 para viagem', category: 'Financeiro', progressUnit: 'Dinheiro (R$)', targetValue: 5000, currentProgress: 1500, deadline: new Date(new Date().getFullYear(), 11, 31).toISOString() },
-    { id: '2', name: 'Ler "O Poder do Hábito"', category: 'Leitura', progressUnit: 'Quantidade', targetValue: 1, currentProgress: 0 },
-    { id: '3', name: 'Pedalar 30km no mês', category: 'Esportes', progressUnit: 'Distância (km)', targetValue: 30, currentProgress: 12 },
 ];
 
 
@@ -46,6 +42,7 @@ const App: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>(() => getInitialState('aiv-appointments', []));
   const [tasks, setTasks] = useState<Task[]>(() => getInitialState('aiv-tasks', []));
   const [habits, setHabits] = useState<Habit[]>(() => getInitialState('aiv-habits', []));
+  const [habitLogs, setHabitLogs] = useState<HabitLog[]>(() => getInitialState('aiv-habitLogs', []));
   const [transactions, setTransactions] = useState<Transaction[]>(() => getInitialState('aiv-transactions', []));
   const [goals, setGoals] = useState<Goal[]>(() => getInitialState('aiv-goals', []));
   const [healthData, setHealthData] = useState<HealthData>(() => getInitialState('aiv-healthData', { steps: 0, sleep: 0, water: 0 }));
@@ -58,10 +55,11 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-appointments', JSON.stringify(appointments));
     localStorage.setItem('aiv-tasks', JSON.stringify(tasks));
     localStorage.setItem('aiv-habits', JSON.stringify(habits));
+    localStorage.setItem('aiv-habitLogs', JSON.stringify(habitLogs));
     localStorage.setItem('aiv-transactions', JSON.stringify(transactions));
     localStorage.setItem('aiv-goals', JSON.stringify(goals));
     localStorage.setItem('aiv-healthData', JSON.stringify(healthData));
-  }, [user, isOnboarded, isDarkMode, appointments, tasks, habits, transactions, goals, healthData]);
+  }, [user, isOnboarded, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData]);
   
   // Dark mode effect
   useEffect(() => {
@@ -74,10 +72,11 @@ const App: React.FC = () => {
   
   const handleOnboardingComplete = (userData: User) => {
     setUser(userData);
-    // Give user some initial data to see how the app works
+    // Give user some initial data to see how the app works, but start habits from scratch.
     setAppointments(initialAppointments);
     setTasks(initialTasks);
-    setHabits(initialHabits);
+    setHabits([]);
+    setHabitLogs([]);
     setGoals(initialGoals);
     setIsOnboarded(true);
   };
@@ -92,24 +91,58 @@ const App: React.FC = () => {
     setAppointments(prev => [...prev, newAppointment]);
   };
   
+  // --- TASKS ---
   const addTask = (task: Omit<Task, 'id' | 'completed'>) => {
     const newTask = { ...task, id: crypto.randomUUID(), completed: false };
-    setTasks(prev => [...prev, newTask]);
+    setTasks(prev => [newTask, ...prev]);
   };
-
+  const updateTask = (updatedTask: Task) => {
+    setTasks(tasks.map(t => t.id === updatedTask.id ? updatedTask : t));
+  };
+  const deleteTask = (taskId: string) => {
+    setTasks(tasks.filter(t => t.id !== taskId));
+  }
   const toggleTask = (taskId: string) => {
-    setTasks(tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t));
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : undefined } : t));
   };
   
-  const updateHabit = (habitId: string, completed: number) => {
-    setHabits(habits.map(h => h.id === habitId ? { ...h, completed: Math.max(0, completed) } : h));
+  // --- HABITS ---
+  const addHabit = (habit: Omit<Habit, 'id'>) => {
+      const newHabit = { ...habit, id: crypto.randomUUID() };
+      setHabits(prev => [newHabit, ...prev]);
+  };
+  const updateHabit = (updatedHabit: Habit) => {
+      setHabits(habits.map(h => h.id === updatedHabit.id ? updatedHabit : h));
+  };
+  const deleteHabit = (habitId: string) => {
+      if(confirm('Tem certeza que deseja excluir este hábito? Todo o histórico de progresso será perdido.')){
+        setHabits(habits.filter(h => h.id !== habitId));
+        setHabitLogs(logs => logs.filter(l => l.habitId !== habitId)); // Also clear logs
+      }
+  };
+  const logHabitProgress = (habitId: string, progress: number, date: string) => {
+    const existingLogIndex = habitLogs.findIndex(l => l.habitId === habitId && l.date === date);
+    if (existingLogIndex > -1) {
+        setHabitLogs(logs => logs.map((log, index) => index === existingLogIndex ? { ...log, progress } : log));
+    } else {
+        setHabitLogs(logs => [...logs, { habitId, date, progress }]);
+    }
   };
   
+  // --- OTHERS ---
   const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
     const newTransaction = { ...transaction, id: crypto.randomUUID() };
     setTransactions(prev => [newTransaction, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
   
+  const updateTransaction = (updatedTransaction: Transaction) => {
+    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  };
+
+  const deleteTransaction = (transactionId: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== transactionId));
+  };
+
   const updateHealthData = (data: Partial<HealthData>) => {
     setHealthData(prev => ({ ...prev, ...data }));
   };
@@ -128,8 +161,8 @@ const App: React.FC = () => {
   };
 
   // Create daily reminders for ongoing goals to display on the agenda
-  const goalReminders = useMemo(() => {
-    return goals
+  const generatedAppointments = useMemo(() => {
+    const reminders = goals
       .filter(g => g.currentProgress < g.targetValue) // only ongoing goals
       .map(g => {
         const reminderDate = new Date();
@@ -138,11 +171,23 @@ const App: React.FC = () => {
           id: `goal-reminder-${g.id}`,
           title: `Lembre-se da sua meta: ${g.name}`,
           date: reminderDate.toISOString(),
-          duration: 0, // It's just a reminder
+          duration: 0,
           isReminder: true,
         } as Appointment;
       });
-  }, [goals]);
+
+    const tasksOnAgenda = tasks
+        .filter(t => t.dueDate && !t.completed)
+        .map(t => ({
+            id: `task-${t.id}`,
+            title: `Tarefa: ${t.title}`,
+            date: t.dueDate as string,
+            duration: 0,
+            isTask: true,
+        } as Appointment));
+
+    return [...reminders, ...tasksOnAgenda];
+  }, [goals, tasks]);
 
   if (!isOnboarded) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
@@ -151,20 +196,29 @@ const App: React.FC = () => {
   const ActivePageComponent = PAGE_COMPONENTS[activePage];
   const pageProps = {
     user: user!,
-    appointments: [...appointments, ...goalReminders],
+    appointments: [...appointments, ...generatedAppointments],
     tasks,
     habits,
+    habitLogs,
     transactions,
     goals,
     healthData,
     isDarkMode,
     setActivePage,
     toggleDarkMode,
+    // Functions
     addAppointment,
     addTask,
+    updateTask,
+    deleteTask,
     toggleTask,
+    addHabit,
     updateHabit,
+    deleteHabit,
+    logHabitProgress,
     addTransaction,
+    updateTransaction,
+    deleteTransaction,
     updateHealthData,
     addGoal,
     updateGoal,

@@ -1,13 +1,15 @@
 import React from 'react';
-import { Page, PageProps, Task } from '../types';
+import { Page, PageProps } from '../types';
 import Card from '../components/Card';
-import { HomeIcon } from '../constants';
+import { getTodayDateString } from '../utils/dateUtils';
 
-const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, healthData, goals, setActivePage }) => {
+const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, habitLogs, healthData, goals, setActivePage, toggleTask, logHabitProgress }) => {
   const today = new Date();
-  const todayAppointments = appointments.filter(a => new Date(a.date).toDateString() === today.toDateString());
-  const pendingTasks = tasks.filter(t => !t.completed);
+  const todayStr = getTodayDateString(today);
 
+  const todayAppointments = appointments.filter(a => new Date(a.date).toDateString() === today.toDateString());
+  const todayTasks = tasks.filter(t => !t.completed && (!t.dueDate || new Date(t.dueDate).toDateString() === today.toDateString()));
+  
   const getGreeting = () => {
     const hour = today.getHours();
     if (hour < 12) return "Bom dia";
@@ -16,6 +18,11 @@ const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, hea
   };
   
   const ongoingGoals = goals.filter(g => g.currentProgress < g.targetValue);
+  
+  const getHabitProgress = (habitId: string) => {
+    const log = habitLogs.find(l => l.habitId === habitId && l.date === todayStr);
+    return log ? log.progress : 0;
+  }
 
   return (
     <div className="space-y-6">
@@ -32,7 +39,7 @@ const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, hea
                 <ul className="space-y-3">
                     {todayAppointments.slice(0, 3).map(app => (
                         <li key={app.id} className="flex items-start space-x-3">
-                            <div className={`${app.isReminder ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'} font-semibold rounded-md px-2 py-1 text-sm`}>
+                            <div className={`${app.isReminder ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' : app.isTask ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'} font-semibold rounded-md px-2 py-1 text-sm`}>
                                 {new Date(app.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                             <p className="text-gray-700 dark:text-gray-300">{app.title}</p>
@@ -42,41 +49,65 @@ const Dashboard: React.FC<PageProps> = ({ user, appointments, tasks, habits, hea
             ) : (
                 <p className="text-gray-500 dark:text-gray-400">Nenhum compromisso para hoje.</p>
             )}
+             <button onClick={() => setActivePage(Page.Agenda)} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline mt-4">Ver agenda</button>
         </Card>
 
-        {/* Tarefas Pendentes */}
+        {/* Tarefas de Hoje */}
         <Card>
-            <h2 className="font-bold text-lg text-green-600 dark:text-green-400 mb-4">Tarefas Pendentes</h2>
-            {pendingTasks.length > 0 ? (
+            <h2 className="font-bold text-lg text-green-600 dark:text-green-400 mb-4">Tarefas de Hoje</h2>
+            {todayTasks.length > 0 ? (
                 <ul className="space-y-2">
-                    {pendingTasks.slice(0, 3).map(task => (
+                    {todayTasks.slice(0, 3).map(task => (
                         <li key={task.id} className="flex items-center">
-                            <span className="w-2 h-2 rounded-full mr-3 bg-green-500"></span>
-                            <span>{task.title}</span>
+                           <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id)} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                           <span className="ml-3">{task.title}</span>
                         </li>
                     ))}
                 </ul>
             ) : (
-                <p className="text-gray-500 dark:text-gray-400">Todas as tarefas concluídas!</p>
+                <p className="text-gray-500 dark:text-gray-400">Nenhuma tarefa para hoje!</p>
             )}
+             <button onClick={() => setActivePage(Page.Tasks)} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline mt-4">Ver todas</button>
         </Card>
         
-        {/* Hábitos */}
+        {/* Hábitos de Hoje */}
         <Card>
-          <h2 className="font-bold text-lg text-indigo-600 dark:text-indigo-400 mb-4">Progresso dos Hábitos</h2>
+          <h2 className="font-bold text-lg text-indigo-600 dark:text-indigo-400 mb-4">Hábitos de Hoje</h2>
           <div className="space-y-3">
-            {habits.map(habit => (
-              <div key={habit.id}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium">{habit.title}</span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{habit.completed}/{habit.goal}</span>
+            {habits.length > 0 ? habits.slice(0,2).map(habit => {
+              const progress = getHabitProgress(habit.id);
+              
+              if (habit.type === 'conclusive') {
+                return (
+                  <div key={habit.id} className="flex items-center justify-between">
+                    <span className="font-medium">{habit.name}</span>
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={progress >= 1}
+                      onChange={(e) => logHabitProgress(habit.id, e.target.checked ? 1 : 0, todayStr)}
+                      />
+                  </div>
+                )
+              }
+
+              const percentage = habit.dailyGoal ? (progress / habit.dailyGoal) * 100 : 0;
+              return (
+                <div key={habit.id}>
+                   <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium">{habit.name}</span>
+                    {habit.dailyGoal && <span className="text-sm text-gray-500 dark:text-gray-400">{progress}/{habit.dailyGoal}</span>}
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                  <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: `${(habit.completed / habit.goal) * 100}%` }}></div>
-                </div>
-              </div>
-            ))}
+              )
+            }) : (
+              <p className="text-gray-500 dark:text-gray-400">Nenhum hábito rastreado.</p>
+            )}
           </div>
+           <button onClick={() => setActivePage(Page.Tasks)} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline mt-4">Ver todos</button>
         </Card>
         
         {/* Saúde Rápida */}

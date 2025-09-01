@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { PageProps, Appointment } from '../types';
 import Card from '../components/Card';
 import { suggestTimeSlots } from '../services/geminiService';
+import { TaskIcon } from '../constants';
 
 const Agenda: React.FC<PageProps> = ({ appointments, addAppointment }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -94,10 +95,18 @@ const Agenda: React.FC<PageProps> = ({ appointments, addAppointment }) => {
             {appointmentsForSelectedDate.length > 0 ? (
               <ul className="space-y-4">
                 {appointmentsForSelectedDate.map(app => (
-                  <li key={app.id} className={`p-4 rounded-lg flex items-start space-x-4 ${app.isReminder ? 'bg-yellow-50 dark:bg-yellow-900/50' : 'bg-gray-50 dark:bg-gray-700'}`}>
+                  <li key={app.id} className={`p-4 rounded-lg flex items-start space-x-4 ${
+                      app.isReminder ? 'bg-yellow-50 dark:bg-yellow-900/50' : 
+                      app.isTask ? 'bg-green-50 dark:bg-green-900/50' : 
+                      'bg-gray-50 dark:bg-gray-700'
+                  }`}>
                     {app.isReminder ? (
                       <div className="bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded-lg p-3">
                           <ReminderIcon className="w-5 h-5"/>
+                      </div>
+                    ) : app.isTask ? (
+                      <div className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg p-3">
+                          <TaskIcon className="w-5 h-5"/>
                       </div>
                     ) : (
                       <div className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold rounded-lg px-3 py-2 text-center">
