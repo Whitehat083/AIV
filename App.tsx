@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem } from './types';
+import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem, FixedAppointment } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
@@ -49,6 +49,9 @@ const App: React.FC = () => {
       routine: [] 
     })
   );
+  
+  // Fixed Appointments State
+  const [fixedAppointments, setFixedAppointments] = useState<FixedAppointment[]>(() => getInitialState('aiv-fixedAppointments', []));
 
 
   // Persist state to localStorage
@@ -68,7 +71,8 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-badges', JSON.stringify(badges));
     localStorage.setItem('aiv-quote', JSON.stringify(motivationalQuote));
     localStorage.setItem('aiv-smartRoutine', JSON.stringify(smartRoutine));
-  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote, smartRoutine]);
+    localStorage.setItem('aiv-fixedAppointments', JSON.stringify(fixedAppointments));
+  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote, smartRoutine, fixedAppointments]);
   
   // Dark mode effect
   useEffect(() => {
@@ -290,6 +294,38 @@ const App: React.FC = () => {
     }));
   };
 
+  const syncRoutineToAgenda = (routineItems: Omit<Appointment, 'id' | 'isAiGenerated'>[], routineDate: string) => {
+    setAppointments(prev => {
+        // Filter out old AI-generated appointments for that specific day to allow overwriting
+        const nonRoutineAppointments = prev.filter(app => 
+            !(app.isAiGenerated && getTodayDateString(new Date(app.date)) === routineDate)
+        );
+
+        // Create new appointments from the routine
+        const newRoutineAppointments = routineItems.map(item => ({
+            ...item,
+            id: crypto.randomUUID(),
+            isAiGenerated: true,
+        }));
+
+        return [...nonRoutineAppointments, ...newRoutineAppointments];
+    });
+    alert("Sua rotina foi adicionada à agenda!");
+    setActivePage(Page.Agenda);
+  };
+
+  // Fixed Appointments CRUD
+  const addFixedAppointment = (appointment: Omit<FixedAppointment, 'id'>) => {
+    const newAppointment = { ...appointment, id: crypto.randomUUID() };
+    setFixedAppointments(prev => [...prev, newAppointment]);
+  };
+  const updateFixedAppointment = (updatedAppointment: FixedAppointment) => {
+    setFixedAppointments(prev => prev.map(a => a.id === updatedAppointment.id ? updatedAppointment : a));
+  };
+  const deleteFixedAppointment = (appointmentId: string) => {
+    setFixedAppointments(prev => prev.filter(a => a.id !== appointmentId));
+  };
+
 
   // Create daily reminders for ongoing goals to display on the agenda
   const generatedAppointments = useMemo(() => {
@@ -370,6 +406,12 @@ const App: React.FC = () => {
     addMoodLog,
     smartRoutine,
     updateSmartRoutine,
+    syncRoutineToAgenda,
+    // Fixed Appointments
+    fixedAppointments,
+    addFixedAppointment,
+    updateFixedAppointment,
+    deleteFixedAppointment,
   };
 
   return (

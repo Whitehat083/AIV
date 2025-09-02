@@ -1,16 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { PageProps, RoutinePreferences, RoutineItem } from '../types';
 import Card from '../components/Card';
-import { generateSmartRoutine } from '../services/geminiService';
-
-const iconMap: { [key in RoutineItem['type']]: string } = {
-  appointment: '🗓️',
-  task: '✅',
-  habit: '🔄',
-  break: '☕',
-  goal: '🎯',
-  focus: '🧠',
-};
+import { generateSmartRoutine, resolveRoutineConflicts, ResolvedRoutineItem } from '../services/geminiService';
+import RoutineConfirmationModal from '../components/RoutineConfirmationModal';
+import { getTodayDateString } from '../utils/dateUtils';
 
 const SmartRoutine: React.FC<PageProps> = (props) => {
     const { 
@@ -20,12 +13,17 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
         tasks,
         habits,
         goals,
-        moodLogs
+        moodLogs,
+        syncRoutineToAgenda,
     } = props;
 
     const [preferences, setPreferences] = useState<RoutinePreferences>(smartRoutine.preferences);
     const [isLoading, setIsLoading] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [resolvedRoutine, setResolvedRoutine] = useState<ResolvedRoutineItem[]>([]);
 
     const handlePreferencesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setPreferences({ ...preferences, [e.target.name]: e.target.value });
@@ -63,6 +61,43 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
     
     const handleClearRoutine = () => {
         updateSmartRoutine({ routine: [] });
+    };
+
+    const handleAddToAgendaClick = async () => {
+        setIsSyncing(true);
+        setError(null);
+        try {
+            const today = new Date();
+            const todayStr = getTodayDateString(today);
+            const todayAppointments = appointments.filter(a => getTodayDateString(new Date(a.date)) === todayStr);
+
+            const resolved = await resolveRoutineConflicts(smartRoutine.routine, todayAppointments);
+            setResolvedRoutine(resolved);
+            setIsConfirmModalOpen(true);
+
+        } catch (err) {
+             setError("Não foi possível verificar os conflitos da agenda. Por favor, tente novamente.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleConfirmSync = (routineToSync: ResolvedRoutineItem[]) => {
+        const todayStr = getTodayDateString(new Date());
+        const appointmentsToSync = routineToSync.map(item => {
+            const [hours, minutes] = item.time.split(':');
+            const itemDate = new Date();
+            itemDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+            
+            return {
+                title: item.title,
+                date: itemDate.toISOString(),
+                duration: item.duration,
+                icon: item.icon,
+            };
+        });
+        syncRoutineToAgenda(appointmentsToSync, todayStr);
+        setIsConfirmModalOpen(false);
     };
 
     return (
@@ -126,7 +161,7 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-2xl font-bold">Sua Rotina Sugerida</h2>
-                        <div className="flex gap-2">
+                        <div className="flex gap-4">
                              <button onClick={handleGenerateRoutine} disabled={isLoading} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">Gerar Novamente</button>
                              <button onClick={handleClearRoutine} className="text-sm font-semibold text-red-600 dark:text-red-400 hover:underline">Limpar</button>
                         </div>
@@ -137,7 +172,7 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
                             <div className="absolute -left-[34px] top-1.5 h-4 w-4 bg-blue-500 rounded-full border-4 border-white dark:border-gray-900"></div>
                             <p className="font-bold text-gray-500 dark:text-gray-400">{item.time}</p>
                             <div className="flex items-center gap-3 mt-1">
-                                <span className="text-2xl">{item.icon || iconMap[item.type] || '📌'}</span>
+                                <span className="text-2xl">{item.icon}</span>
                                 <div>
                                     <h3 className="font-semibold text-lg">{item.title}</h3>
                                     <p className="text-sm text-gray-500">{item.duration} minutos - {item.type}</p>
@@ -146,8 +181,25 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
                         </div>
                     ))}
                    </div>
+                   <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                        <button 
+                            onClick={handleAddToAgendaClick}
+                            disabled={isSyncing}
+                            className="w-full bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold py-4 px-6 rounded-lg text-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                        >
+                            {isSyncing ? 'Verificando agenda...' : 'Adicionar Rotina à Agenda'}
+                        </button>
+                   </div>
                 </Card>
             )}
+
+            <RoutineConfirmationModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={handleConfirmSync}
+                routine={resolvedRoutine}
+            />
+
         </div>
     );
 };

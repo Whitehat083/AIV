@@ -10,6 +10,21 @@ export enum Page {
   SmartRoutine = 'Rotina Inteligente',
 }
 
+export interface Recurrence {
+  days: ('Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday')[];
+  exceptionDates: string[]; // YYYY-MM-DD
+}
+
+export interface FixedAppointment {
+  id: string;
+  title: string;
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
+  location?: string;
+  recurrence: Recurrence;
+}
+
+
 export interface Appointment {
   id: string;
   title: string;
@@ -19,6 +34,10 @@ export interface Appointment {
   description?: string;
   isReminder?: boolean; // Flag for goal reminders
   isTask?: boolean; // Flag for tasks on agenda
+  isTravel?: boolean; // Flag for travel time
+  isAiGenerated?: boolean; // Flag for items from Smart Routine
+  icon?: string; // Icon from Smart Routine
+  isFixed?: boolean; // Flag for fixed/recurring appointments
 }
 
 export interface Task {
@@ -171,4 +190,11 @@ export interface PageProps {
     routine: RoutineItem[];
   };
   updateSmartRoutine: (data: Partial<{ preferences: RoutinePreferences; routine: RoutineItem[] }>) => void;
+  syncRoutineToAgenda: (routineItems: Omit<Appointment, 'id' | 'isAiGenerated'>[], routineDate: string) => void;
+
+  // Fixed Appointments
+  fixedAppointments: FixedAppointment[];
+  addFixedAppointment: (appointment: Omit<FixedAppointment, 'id'>) => void;
+  updateFixedAppointment: (appointment: FixedAppointment) => void;
+  deleteFixedAppointment: (appointmentId: string) => void;
 }

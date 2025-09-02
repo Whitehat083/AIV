@@ -1,15 +1,21 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { PageProps, RoutineItem } from '../types';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { PageProps, RoutineItem, Appointment, FixedAppointment } from '../types';
 import Card from '../components/Card';
-import { generateAgendaSuggestions, AiAgendaResponse } from '../services/geminiService';
-import { getTodayDateString } from '../utils/dateUtils';
+import Modal from '../components/Modal';
+import { generateAgendaSuggestions, AiAgendaResponse, getAppointmentSuggestions, AiAppointmentSuggestion } from '../services/geminiService';
+import { getTodayDateString, generateAppointmentsFromFixed } from '../utils/dateUtils';
+import { useDebounce } from '../hooks/useDebounce';
 
 type ViewMode = 'day' | 'week' | 'month';
 
+// Fix: Removed `icon?: string` which was incorrectly overriding the required `icon: string` from `RoutineItem`.
+// `ScheduleItem` now correctly inherits `icon: string`.
 interface ScheduleItem extends RoutineItem {
   id: string;
   date: Date;
+  isFixed?: boolean;
 }
 
 interface LayoutItem extends ScheduleItem {
@@ -27,6 +33,8 @@ const typeInfo: { [key: string]: { classes: string; icon: string; name: string }
   break: { classes: 'bg-yellow-50 dark:bg-yellow-900/50 border-yellow-500 text-yellow-800 dark:text-yellow-200', icon: '☕', name: 'Pausa' },
   focus: { classes: 'bg-orange-50 dark:bg-orange-900/50 border-orange-500 text-orange-800 dark:text-orange-200', icon: '🧠', name: 'Foco' },
   reminder: { classes: 'bg-yellow-50 dark:bg-yellow-900/50 border-yellow-500 text-yellow-800 dark:text-yellow-200', icon: '🔔', name: 'Lembrete' },
+  travel: { classes: 'bg-gray-100 dark:bg-gray-800/50 border-gray-400 text-gray-600 dark:text-gray-300', icon: '🚗', name: 'Deslocamento' },
+  fixed: { classes: 'bg-gray-200 dark:bg-gray-800 border-gray-500 text-gray-800 dark:text-gray-200', icon: '🔒', name: 'Fixo'},
   default: { classes: 'bg-gray-50 dark:bg-gray-800/50 border-gray-400 text-gray-700 dark:text-gray-300', icon: '📌', name: 'Evento' },
 };
 
@@ -85,18 +93,30 @@ const processEventsForLayout = (items: ScheduleItem[]): LayoutItem[] => {
 
 
 const Agenda: React.FC<PageProps> = (props) => {
-  const { appointments, tasks, habits, goals } = props;
+  const { appointments, tasks, habits, goals, addAppointment, fixedAppointments } = props;
   const [view, setView] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [aiData, setAiData] = useState<AiAgendaResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // New Appointment Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newAppointment, setNewAppointment] = useState<Partial<Omit<Appointment, 'id'>>>({ title: '', date: '', duration: 30, location: '' });
+  const [aiSuggestions, setAiSuggestions] = useState<AiAppointmentSuggestion>({});
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const debouncedAppointment = useDebounce(newAppointment, 500);
+
+  const dailyAppointments = useMemo(() => {
+    const regular = appointments.filter(a => getTodayDateString(new Date(a.date)) === getTodayDateString(currentDate));
+    const fixed = generateAppointmentsFromFixed(fixedAppointments, currentDate);
+    return [...regular, ...fixed];
+  }, [currentDate, appointments, fixedAppointments]);
+
 
   useEffect(() => {
     const fetchAiSuggestions = async () => {
         setIsLoading(true);
         try {
-            const todayStr = getTodayDateString(currentDate);
-            const dailyAppointments = appointments.filter(a => getTodayDateString(new Date(a.date)) === todayStr);
             const pendingTasks = tasks.filter(t => !t.completed);
             const dailyHabits = habits.filter(h => h.frequency === 'daily');
 
@@ -111,23 +131,106 @@ const Agenda: React.FC<PageProps> = (props) => {
     if (view === 'day') {
       fetchAiSuggestions();
     }
-  }, [currentDate, appointments, tasks, habits, goals, view]);
+  }, [currentDate, dailyAppointments, tasks, habits, goals, view]);
+  
+  // Effect for new appointment contextual AI
+  useEffect(() => {
+    const getContextualSuggestions = async () => {
+        if (!isModalOpen) return;
+        setIsAiLoading(true);
+        
+        const suggestions = await getAppointmentSuggestions(
+            debouncedAppointment,
+            dailyAppointments,
+            habits,
+            tasks
+        );
+        setAiSuggestions(prev => ({...prev, ...suggestions}));
+
+        // if optimal time was suggested, clear it after it's been fetched
+        if(suggestions.optimalTimeSuggestion) {
+            setAiSuggestions(current => ({...current, optimalTimeSuggestion: suggestions.optimalTimeSuggestion}))
+        } else {
+            // only clear conflict and travel if they were not in the new suggestion
+            setAiSuggestions(current => ({
+                optimalTimeSuggestion: current.optimalTimeSuggestion, // preserve existing suggestion
+                conflict: suggestions.conflict,
+                travelInfo: suggestions.travelInfo
+            }))
+        }
+
+        setIsAiLoading(false);
+    };
+
+    getContextualSuggestions();
+  }, [debouncedAppointment, isModalOpen, dailyAppointments, habits, tasks]);
+
+  const handleOpenModal = () => {
+    const defaultDate = new Date();
+    defaultDate.setHours(defaultDate.getHours() + 1);
+    defaultDate.setMinutes(0);
+    defaultDate.setSeconds(0);
+    setNewAppointment({ title: '', date: defaultDate.toISOString().slice(0, 16), duration: 30, location: '' });
+    setAiSuggestions({});
+    setIsModalOpen(true);
+  }
+
+  const handleSaveAppointment = () => {
+    if (!newAppointment.title || !newAppointment.date || !newAppointment.duration) {
+        alert("Por favor, preencha o título, data e duração.");
+        return;
+    }
+    
+    // Add travel event if applicable
+    if (newAppointment.location && aiSuggestions.travelInfo?.travelTime) {
+        const mainDate = new Date(newAppointment.date);
+        const travelStartDate = new Date(mainDate.getTime() - aiSuggestions.travelInfo.travelTime * 60000);
+        addAppointment({
+            title: `Deslocamento para ${newAppointment.title}`,
+            date: travelStartDate.toISOString(),
+            duration: aiSuggestions.travelInfo.travelTime,
+            isTravel: true,
+        });
+    }
+
+    addAppointment({
+        title: newAppointment.title,
+        date: newAppointment.date,
+        duration: newAppointment.duration,
+        location: newAppointment.location,
+        description: newAppointment.description,
+    });
+    
+    setIsModalOpen(false);
+  };
 
   const allItemsForDay = useMemo((): ScheduleItem[] => {
-    const todayStr = getTodayDateString(currentDate);
-    
-    const mappedAppointments = appointments
-        .filter(a => getTodayDateString(new Date(a.date)) === todayStr)
+    const mappedAppointments = dailyAppointments
         .map(a => {
-            const itemType = a.isTask ? 'task' : a.isReminder ? 'reminder' : 'appointment';
+            let itemType: RoutineItem['type'] = a.isFixed ? 'appointment' : 'appointment'; // Default to appointment
+             if (a.isFixed) itemType = 'focus'; // Simplified for typing
+            if (a.isTravel) itemType = 'break'; // Simplified for typing
+            if (a.isTask) itemType = 'task';
+            if (a.isReminder) itemType = 'habit'; // Simplified
+            if (a.isAiGenerated) {
+                // Heuristic to guess type from title if not explicitly stored
+                const titleLower = a.title.toLowerCase();
+                if (titleLower.includes('pausa') || titleLower.includes('break')) itemType = 'break';
+                else if (titleLower.includes('hábito')) itemType = 'habit';
+                else if (titleLower.includes('meta')) itemType = 'goal';
+                else if (titleLower.includes('foco')) itemType = 'focus';
+            }
+
             return {
                 id: a.id,
                 title: a.title,
                 date: new Date(a.date),
                 time: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                 duration: a.duration,
-                type: itemType as RoutineItem['type'],
-                icon: typeInfo[itemType].icon,
+                type: itemType,
+                isFixed: a.isFixed,
+                // Fix: Ensure icon is always a string by providing a fallback to the default icon.
+                icon: a.icon || (typeInfo[itemType] || typeInfo.default).icon,
             }
         });
 
@@ -143,7 +246,7 @@ const Agenda: React.FC<PageProps> = (props) => {
     }) || [];
 
     return [...mappedAppointments, ...aiSchedule].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [appointments, aiData, currentDate]);
+  }, [dailyAppointments, aiData, currentDate]);
 
   const handleDateChange = (amount: number) => {
       setCurrentDate(prev => {
@@ -213,7 +316,8 @@ const Agenda: React.FC<PageProps> = (props) => {
                         </div>
                     )}
                     {processedEvents.map(item => {
-                        const info = typeInfo[item.type] || typeInfo.default;
+                        const info = item.isFixed ? typeInfo.fixed : typeInfo[item.type] || typeInfo.default;
+                        const icon = item.isFixed ? typeInfo.fixed.icon : (item.icon || info.icon);
                         // Prevent event from overflowing the bottom
                         const height = Math.min(item.height, 16 * 60 - item.top);
                         const startTime = item.time;
@@ -230,7 +334,7 @@ const Agenda: React.FC<PageProps> = (props) => {
                                     minHeight: '2rem'
                                 }}
                             >
-                                <p className="font-bold text-sm truncate leading-tight">{item.icon} {item.title}</p>
+                                <p className="font-bold text-sm truncate leading-tight">{icon} {item.title}</p>
                                 {height > 35 && <p className="text-xs opacity-80 mt-1">{startTime} - {endTime}</p>}
                             </div>
                         )
@@ -263,7 +367,7 @@ const Agenda: React.FC<PageProps> = (props) => {
                   <h2 className="text-lg font-semibold text-center w-48">{getHeaderTitle()}</h2>
                   <button onClick={() => handleDateChange(1)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">&gt;</button>
                </div>
-               <button onClick={() => setCurrentDate(new Date())} className="text-sm font-semibold bg-gray-200 dark:bg-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Hoje</button>
+               <button onClick={handleOpenModal} className="text-sm font-semibold bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">+ Novo Compromisso</button>
           </div>
           {view === 'day' && <div className="h-[600px] overflow-y-auto pr-4 pb-4 pl-2 rounded-b-xl"><DayView /></div>}
       </Card>
@@ -302,6 +406,66 @@ const Agenda: React.FC<PageProps> = (props) => {
           </Card>
         </div>
       )}
+        
+        {/* New Appointment Modal */}
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Compromisso Inteligente">
+             <div className="space-y-4">
+                <div>
+                    <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
+                    <input type="text" name="title" id="title" value={newAppointment.title} onChange={e => setNewAppointment(p => ({...p, title: e.target.value}))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="date" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data e Hora</label>
+                        <input type="datetime-local" name="date" id="date" value={newAppointment.date?.substring(0, 16)} onChange={e => setNewAppointment(p => ({...p, date: e.target.value}))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                    </div>
+                     <div>
+                        <label htmlFor="duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Duração (min)</label>
+                        <input type="number" name="duration" id="duration" value={newAppointment.duration} onChange={e => setNewAppointment(p => ({...p, duration: parseInt(e.target.value, 10)}))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                    </div>
+                </div>
+                <div>
+                    <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Local (Opcional)</label>
+                    <input type="text" name="location" id="location" value={newAppointment.location} onChange={e => setNewAppointment(p => ({...p, location: e.target.value}))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" placeholder="Ex: Av. Paulista, 1000"/>
+                </div>
+
+                {isAiLoading && <div className="text-sm text-gray-500 text-center">IA analisando...</div>}
+
+                {/* AI Suggestions Section */}
+                {!isAiLoading && (aiSuggestions.optimalTimeSuggestion || aiSuggestions.travelInfo || aiSuggestions.conflict) && (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-3">
+                      <h3 className="font-semibold text-sm text-gray-600 dark:text-gray-300">Sugestões da IA</h3>
+                      {aiSuggestions.optimalTimeSuggestion && (
+                         <div className="flex items-center gap-2">
+                             <p className="text-xs flex-1">{aiSuggestions.optimalTimeSuggestion.reason}</p>
+                             <button onClick={() => setNewAppointment(p => ({...p, date: aiSuggestions.optimalTimeSuggestion?.time}))} className="text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200">
+                                 Agendar para {new Date(aiSuggestions.optimalTimeSuggestion.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}?
+                             </button>
+                         </div>
+                      )}
+                      {aiSuggestions.travelInfo && (
+                         <div className="text-xs p-2 bg-blue-50 dark:bg-blue-900/40 rounded-md">🚗 {aiSuggestions.travelInfo.suggestion} A agenda será ajustada.</div>
+                      )}
+                      {aiSuggestions.conflict && (
+                          <div className="text-xs p-2 bg-red-50 dark:bg-red-900/40 rounded-md border-l-2 border-red-500">
+                              <p className="font-bold">⚠️ Conflito Detectado!</p>
+                              <p>Este horário conflita com: <span className="font-semibold">{aiSuggestions.conflict.conflictsWith}</span>.</p>
+                              <p>{aiSuggestions.conflict.resolution}</p>
+                          </div>
+                      )}
+                  </div>
+                )}
+
+
+                <div className="flex justify-end pt-4 gap-2">
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
+                    <button onClick={handleSaveAppointment} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                        Salvar Compromisso
+                    </button>
+                </div>
+            </div>
+        </Modal>
+
     </div>
   );
 };

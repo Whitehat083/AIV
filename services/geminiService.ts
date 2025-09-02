@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Appointment, Goal, Habit, HabitLog, Mood, MoodLog, Task, RoutinePreferences, RoutineItem } from "../types";
+import { Appointment, Goal, Habit, HabitLog, Mood, MoodLog, Task, RoutinePreferences, RoutineItem, FixedAppointment } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -11,8 +11,193 @@ export interface AiAgendaResponse {
   proactiveSuggestion: { text: string };
 }
 
+export interface AiAppointmentSuggestion {
+    optimalTimeSuggestion?: { time: string; reason: string };
+    travelInfo?: { travelTime: number; suggestion: string };
+    conflict?: { conflictsWith: string; resolution: string };
+}
+
+export interface ResolvedRoutineItem extends RoutineItem {
+    conflictNote?: string;
+}
+
+
+export const resolveRoutineConflicts = async (
+    routine: RoutineItem[],
+    existingAppointments: Appointment[]
+): Promise<ResolvedRoutineItem[]> => {
+    if (!process.env.API_KEY) {
+        console.warn("API Key not found. Returning mock data for conflict resolution.");
+        // Simple mock conflict check
+        return routine.map(item => {
+            const [hour, minute] = item.time.split(':').map(Number);
+            const itemStart = hour * 60 + minute;
+            const itemEnd = itemStart + item.duration;
+
+            const hasConflict = existingAppointments.some(app => {
+                const appDate = new Date(app.date);
+                const appStart = appDate.getHours() * 60 + appDate.getMinutes();
+                const appEnd = appStart + app.duration;
+                return Math.max(itemStart, appStart) < Math.min(itemEnd, appEnd); // Overlap check
+            });
+
+            if (hasConflict) {
+                const newStartMinute = itemEnd + 15; // Place it 15 mins after conflict
+                const newHour = Math.floor(newStartMinute / 60);
+                const newMinute = newStartMinute % 60;
+                return {
+                    ...item,
+                    time: `${String(newHour).padStart(2, '0')}:${String(newMinute).padStart(2, '0')}`,
+                    conflictNote: `Horário original (${item.time}) estava ocupado. Sugerimos um novo horário.`
+                };
+            }
+            return item;
+        });
+    }
+
+    const prompt = `
+        You are a master scheduler AI. Your task is to intelligently merge a new, proposed daily routine into a user's existing calendar, resolving any conflicts.
+
+        **Context:**
+        1.  **Existing Appointments (Fixed):** These cannot be moved.
+            ${existingAppointments.length > 0 ? JSON.stringify(existingAppointments.map(a => ({ title: a.title, time: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), duration: a.duration, isFixed: a.isFixed }))) : "Nenhum."}
+        
+        2.  **Proposed Routine (Flexible):** These are the new items to be added.
+            ${JSON.stringify(routine)}
+
+        **Your Mission:**
+        - Go through each item in the "Proposed Routine".
+        - Check if its proposed 'time' conflicts with any "Existing Appointments".
+        - If there is NO conflict, keep the item as is.
+        - If there IS a conflict, find the nearest available time slot (after the conflict is preferred) that can accommodate the item's duration and update its 'time'.
+        - When you change an item's time, you MUST add a 'conflictNote' field explaining the change briefly (e.g., "Original time of 10:00 was busy due to 'Team Meeting'. Rescheduled.").
+        - Return the complete list of all routine items, adjusted as necessary.
+
+        Respond **ONLY** with a valid JSON array, following the provided schema.
+    `;
+    
+    try {
+         const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                             time: { type: Type.STRING },
+                             title: { type: Type.STRING },
+                             duration: { type: Type.NUMBER },
+                             type: { type: Type.STRING },
+                             icon: { type: Type.STRING },
+                             conflictNote: { type: Type.STRING }
+                        },
+                         required: ["time", "title", "duration", "type", "icon"]
+                    }
+                }
+            }
+        });
+        const jsonString = response.text;
+        return JSON.parse(jsonString) as ResolvedRoutineItem[];
+    } catch (error) {
+         console.error("Error calling Gemini API for routine conflict resolution:", error);
+        throw new Error("Failed to resolve routine conflicts from AI.");
+    }
+};
+
+
+export const getAppointmentSuggestions = async (
+    proposedAppointment: Partial<Omit<Appointment, 'id'>>,
+    allAppointments: Appointment[], // Includes regular and fixed
+    habits: Habit[],
+    tasks: Task[],
+): Promise<AiAppointmentSuggestion> => {
+    if (!process.env.API_KEY) {
+        console.warn("API Key not found. Returning mock data for appointment suggestions.");
+        if (!proposedAppointment.date) {
+             return { optimalTimeSuggestion: { time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), reason: 'Este é um bom horário livre na sua tarde.' } };
+        }
+        return { travelInfo: { travelTime: 25, suggestion: 'O tempo de viagem estimado é 25 minutos.' } };
+    }
+
+    const todayStr = new Date().toLocaleDateString('pt-BR');
+    
+    const contextPrompt = `
+        **Compromissos de Hoje (os marcados com 'isFixed: true' não podem ser movidos):**
+        ${allAppointments.length > 0 ? JSON.stringify(allAppointments.map(a => ({ title: a.title, time: new Date(a.date).toLocaleTimeString('pt-BR'), duration: a.duration, isFixed: !!a.isFixed }))) : "Nenhum."}
+        **Hábitos Diários a Considerar:**
+        ${habits.length > 0 ? JSON.stringify(habits.map(h => h.name)) : "Nenhum."}
+        **Tarefas Pendentes:**
+        ${tasks.length > 0 ? JSON.stringify(tasks.map(t => t.title)) : "Nenhuma."}
+    `;
+
+    let instructionPrompt = '';
+    if (!proposedAppointment.date) {
+        instructionPrompt = `
+            O usuário quer agendar: "${proposedAppointment.title}" com duração de ${proposedAppointment.duration || 60} minutos.
+            Analise o contexto, respeitando os compromissos fixos, e sugira o **melhor horário livre** para hoje (${todayStr}). Dê preferência a horários que não quebrem blocos longos de tempo livre.
+            Retorne um 'optimalTimeSuggestion' com o 'time' em formato ISO string e uma 'reason' curta.
+        `;
+    } else {
+        instructionPrompt = `
+            O usuário quer agendar: "${proposedAppointment.title}" para ${new Date(proposedAppointment.date).toLocaleString('pt-BR')}.
+            1.  **Análise de Local (se houver):** Se o local for "${proposedAppointment.location}", estime um tempo de viagem realista em minutos (entre 15 e 60). Retorne um 'travelInfo' com 'travelTime' e uma 'suggestion'.
+            2.  **Detecção de Conflito:** Verifique se o horário do compromisso (considerando o tempo de viagem antes dele) conflita com outros compromissos (especialmente os fixos). Se houver conflito, retorne um 'conflict' com 'conflictsWith' (o que está conflitando) e uma 'resolution' (sugestão para resolver).
+            Se não houver local nem conflito, retorne um objeto vazio.
+        `;
+    }
+
+    const prompt = `
+        Você é um assistente de agendamento ultra-inteligente. Analise o contexto do usuário e a instrução a seguir para fornecer uma resposta útil em formato JSON.
+        
+        **Contexto do Usuário:**
+        ${contextPrompt}
+
+        **Sua Tarefa:**
+        ${instructionPrompt}
+
+        Responda **APENAS** com um objeto JSON válido.
+    `;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        optimalTimeSuggestion: {
+                            type: Type.OBJECT,
+                            properties: { time: { type: Type.STRING }, reason: { type: Type.STRING } },
+                        },
+                        travelInfo: {
+                            type: Type.OBJECT,
+                            properties: { travelTime: { type: Type.NUMBER }, suggestion: { type: Type.STRING } },
+                        },
+                        conflict: {
+                            type: Type.OBJECT,
+                            properties: { conflictsWith: { type: Type.STRING }, resolution: { type: Type.STRING } },
+                        },
+                    },
+                }
+            }
+        });
+        const jsonString = response.text;
+        return JSON.parse(jsonString);
+
+    } catch (error) {
+        console.error("Error calling Gemini API for appointment suggestions:", error);
+        return {};
+    }
+};
+
+
 export const generateAgendaSuggestions = async (
-    appointments: Appointment[],
+    appointments: Appointment[], // Includes regular and fixed appointments for the day
     tasks: Task[],
     habits: Habit[],
     goals: Goal[],
@@ -35,8 +220,8 @@ export const generateAgendaSuggestions = async (
         Você é um assistente de produtividade de elite. Sua tarefa é analisar os dados de um usuário e criar sugestões inteligentes para a agenda do dia de hoje (${today}).
 
         **Contexto do Usuário:**
-        1.  **Compromissos Fixos (Não podem ser movidos):**
-            ${appointments.length > 0 ? JSON.stringify(appointments.map(a => ({ titulo: a.title, horario: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), duracao: a.duration }))) : "Nenhum compromisso fixo hoje."}
+        1.  **Compromissos de Hoje (os marcados com 'isFixed: true' não podem ser movidos):**
+            ${appointments.length > 0 ? JSON.stringify(appointments.map(a => ({ titulo: a.title, horario: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), duracao: a.duration, isFixed: !!a.isFixed }))) : "Nenhum compromisso hoje."}
         2.  **Tarefas Pendentes (Para encaixar nos horários livres):**
             ${tasks.length > 0 ? JSON.stringify(tasks.map(t => ({ titulo: t.title, prioridade: t.priority }))) : "Nenhuma tarefa pendente."}
         3.  **Hábitos Diários (Para encaixar nos horários livres):**
@@ -45,7 +230,7 @@ export const generateAgendaSuggestions = async (
             ${goals.length > 0 ? JSON.stringify(goals.map(g => g.name)) : "Nenhuma meta ativa."}
 
         **Sua Missão em 3 Partes:**
-        1.  **schedule**: Crie um array de itens de agenda para os hábitos e pausas. Encaixe os hábitos diários e 1-3 pausas curtas (10-15 min) em horários livres, evitando conflitos com os compromissos fixos. Para cada item, forneça 'time', 'title', 'duration', 'type' ('habit', 'break' ou 'goal'), e um 'icon' (emoji).
+        1.  **schedule**: Crie um array de itens de agenda para os hábitos e pausas. Encaixe os hábitos diários e 1-3 pausas curtas (10-15 min) em horários livres, **respeitando e evitando conflitos com os compromissos fixos**. Para cada item, forneça 'time', 'title', 'duration', 'type' ('habit', 'break' ou 'goal'), e um 'icon' (emoji).
         2.  **highlights**: Analise a agenda completa (compromissos + seu schedule). Identifique 1 ou 2 blocos de tempo (pelo menos 1h) que sejam ideais para trabalho focado. Retorne um array com 'startTime', 'endTime', e uma 'reason' curta.
         3.  **proactiveSuggestion**: Encontre um bloco de tempo livre de pelo menos 30 minutos e sugira proativamente uma ação específica para o usuário, como trabalhar em uma tarefa ou meta pendente. Retorne um objeto com a sugestão no campo 'text'.
 
@@ -252,7 +437,7 @@ export const generateWeeklyChallenge = async (
 
 export const generateSmartRoutine = async (
   preferences: RoutinePreferences,
-  appointments: Appointment[],
+  appointments: Appointment[], // Includes regular and fixed appointments for the day
   tasks: Task[],
   habits: Habit[],
   goals: Goal[],
@@ -280,8 +465,8 @@ export const generateSmartRoutine = async (
     1.  **Preferências de Horário:** O dia produtivo do usuário começa às ${preferences.startTime} e termina às ${preferences.endTime}.
     2.  **Prioridades para Hoje:** As principais áreas de foco são: ${preferences.priorities.join(', ')}. Dê mais peso a atividades relacionadas a essas áreas.
     3.  **Estado Emocional:** ${moodContext}
-    4.  **Compromissos Fixos (Não podem ser movidos):**
-        ${appointments.length > 0 ? JSON.stringify(appointments.map(a => ({ titulo: a.title, horario: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), duracao: a.duration }))) : "Nenhum compromisso fixo hoje."}
+    4.  **Compromissos de Hoje (os marcados com 'isFixed: true' são inalteráveis):**
+        ${appointments.length > 0 ? JSON.stringify(appointments.map(a => ({ titulo: a.title, horario: new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), duracao: a.duration, isFixed: !!a.isFixed }))) : "Nenhum compromisso hoje."}
     5.  **Tarefas Pendentes (Encaixe nos horários livres, priorize as de 'alta' prioridade):**
         ${tasks.length > 0 ? JSON.stringify(tasks.map(t => ({ titulo: t.title, prioridade: t.priority, prazo: t.dueDate }))) : "Nenhuma tarefa pendente."}
     6.  **Hábitos a serem incluídos:**
@@ -291,7 +476,7 @@ export const generateSmartRoutine = async (
 
     **Sua Missão:**
     - Crie uma lista de itens de rotina para hoje, começando em ${preferences.startTime} e terminando até ${preferences.endTime}.
-    - Respeite os horários dos compromissos fixos.
+    - **CRÍTICO: Respeite os horários dos compromissos, especialmente os que têm 'isFixed: true'. NÃO agende nada sobre eles.**
     - Distribua as tarefas e hábitos nos horários livres.
     - **IMPORTANTE:** Inclua pausas de 10-15 minutos a cada 60-90 minutos de trabalho focado. Inclua uma pausa para almoço de 45-60 minutos por volta do meio-dia.
     - Se houver tempo, adicione blocos de "Foco na Meta" para as metas de longo prazo.
@@ -330,7 +515,8 @@ export const generateSmartRoutine = async (
     const jsonString = response.text;
     const routine = JSON.parse(jsonString);
     return routine as RoutineItem[];
-  } catch (error) {
+  } catch (error)
+ {
     console.error("Error calling Gemini API for routine generation:", error);
     throw new Error("Failed to generate smart routine from AI.");
   }
