@@ -127,3 +127,84 @@ export const getEmotionalInsights = async (moodLogs: MoodLog[]): Promise<string>
     return "Não foi possível gerar um insight no momento. Tente novamente mais tarde.";
   }
 }
+
+export interface AiChallengeSuggestion {
+  habitId: string;
+  description: string;
+  target: number;
+}
+
+export const generateWeeklyChallenge = async (
+  habits: Habit[],
+  goals: Goal[],
+  moodLogs: MoodLog[]
+): Promise<AiChallengeSuggestion | null> => {
+  if (!process.env.API_KEY || habits.length === 0) {
+    return null;
+  }
+
+  const availableHabits = habits.map(h => ({ id: h.id, name: h.name, category: h.category, description: h.description }));
+
+  const prompt = `
+    Você é um coach de produtividade e bem-estar. Analise os seguintes dados de um usuário para criar um desafio semanal personalizado e motivador.
+
+    **Hábitos Disponíveis (escolha um destes):**
+    ${JSON.stringify(availableHabits)}
+
+    **Metas Atuais do Usuário:**
+    ${JSON.stringify(goals.map(g => g.name)) || 'Nenhuma meta definida.'}
+    
+    **Histórico de Humor Recente (últimos 7 dias):**
+    ${JSON.stringify(moodLogs.slice(-7).map(l => l.mood)) || 'Nenhum humor registrado.'}
+
+    **Sua Tarefa:**
+    Baseado no contexto, sugira um desafio semanal focado em UM dos hábitos listados. O desafio deve ser:
+    1.  **Relevante:** Se o usuário parece estressado ou cansado, sugira um hábito de relaxamento (ex: meditar, ler). Se ele tem metas financeiras, talvez um hábito relacionado a isso.
+    2.  **Motivador:** Crie uma descrição curta e inspiradora para o desafio.
+    3.  **Realista:** Sugira uma meta (target) de conclusão entre 3 e 5 vezes na semana.
+
+    Responda **APENAS** com o objeto JSON.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            habitId: { 
+              type: Type.STRING,
+              description: "O ID exato de um dos hábitos fornecidos."
+            },
+            description: { 
+              type: Type.STRING,
+              description: "Uma descrição curta e motivadora para o desafio (ex: 'Medite 4 vezes esta semana para clarear a mente!')."
+            },
+            target: { 
+              type: Type.INTEGER,
+              description: "Um número entre 3 e 5."
+            },
+          },
+          required: ["habitId", "description", "target"],
+        },
+      },
+    });
+
+    const jsonString = response.text.trim();
+    const suggestion = JSON.parse(jsonString) as AiChallengeSuggestion;
+
+    if (habits.some(h => h.id === suggestion.habitId)) {
+      return suggestion;
+    } else {
+      console.warn("Gemini suggested a challenge for a non-existent habitId:", suggestion.habitId);
+      return null;
+    }
+
+  } catch (error) {
+    console.error("Error generating weekly challenge with Gemini:", error);
+    return null;
+  }
+};

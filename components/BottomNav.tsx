@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Page } from '../types';
 
@@ -16,8 +15,8 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ navItems, activePage, setActivePage }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-lg border-t border-gray-200 dark:border-gray-700">
-      <div className="flex justify-around max-w-screen-md mx-auto">
+    <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-screen-sm bg-gray-900/60 dark:bg-black/50 backdrop-blur-lg rounded-2xl border border-white/10 shadow-2xl z-50">
+      <div className="flex justify-around items-center p-2">
         {navItems.map((item) => {
           const isActive = activePage === item.id;
           const Icon = item.icon;
@@ -25,17 +24,18 @@ const BottomNav: React.FC<BottomNavProps> = ({ navItems, activePage, setActivePa
             <button
               key={item.id}
               onClick={() => setActivePage(item.id)}
-              className={`flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs sm:text-sm transition-colors duration-200 ${
+              className={`relative flex flex-col items-center justify-center w-full py-2 text-xs sm:text-sm transition-all duration-300 rounded-xl ${
                 isActive
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-300'
+                  ? 'text-white'
+                  : 'text-gray-400 hover:text-white'
               }`}
+              aria-label={item.label}
             >
-              <Icon className="w-6 h-6 mb-1" />
-              <span>{item.label}</span>
               {isActive && (
-                <div className="w-8 h-1 bg-blue-600 dark:bg-blue-400 rounded-full mt-1"></div>
+                <div className="absolute inset-0 bg-white/10 rounded-xl"></div>
               )}
+              <Icon className="w-6 h-6 mb-1" />
+              <span className="font-medium">{item.label}</span>
             </button>
           );
         })}

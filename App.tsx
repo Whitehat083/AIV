@@ -6,7 +6,7 @@ import Onboarding from './pages/Onboarding';
 import OnboardingTour from './pages/OnboardingTour';
 import MoodCheckinModal from './components/MoodCheckinModal';
 import { getTodayDateString } from './utils/dateUtils';
-import { generateMotivationalQuote } from './services/geminiService';
+import { generateMotivationalQuote, generateWeeklyChallenge } from './services/geminiService';
 
 const App: React.FC = () => {
   // Helper to get state from localStorage
@@ -72,33 +72,60 @@ const App: React.FC = () => {
   
   // --- Wellbeing Module Effects ---
   useEffect(() => {
+    if (!user || !isTourCompleted) return;
+
+    const todayStr = getTodayDateString(new Date());
+
     // Show mood check-in once per day
-    if (user && isTourCompleted) {
-        const todayStr = getTodayDateString(new Date());
-        const hasLoggedToday = moodLogs.some(log => log.date === todayStr);
-        if (!hasLoggedToday) {
-            setShowMoodCheckin(true);
-        }
+    const hasLoggedToday = moodLogs.some(log => log.date === todayStr);
+    if (!hasLoggedToday) {
+        setShowMoodCheckin(true);
     }
 
     // Check and generate weekly challenge
-    if(habits.length > 0 && (!weeklyChallenge || new Date().getDay() === 1 && weeklyChallenge.startDate !== getTodayDateString(new Date()))){
-        const randomHabit = habits[Math.floor(Math.random() * habits.length)];
-        const newChallenge: WeeklyChallenge = {
-            id: crypto.randomUUID(),
-            habitId: randomHabit.id,
-            description: `Complete o hábito "${randomHabit.name}" 4 vezes esta semana!`,
-            target: 4,
-            progress: 0,
-            startDate: getTodayDateString(new Date()),
-            isCompleted: false,
+    const shouldGenerateChallenge = habits.length > 0 && (!weeklyChallenge || (new Date().getDay() === 1 && weeklyChallenge.startDate !== todayStr));
+    
+    if (shouldGenerateChallenge) {
+        const createChallenge = async () => {
+            let aiSuggestion = null;
+            try {
+                aiSuggestion = await generateWeeklyChallenge(habits, goals, moodLogs);
+            } catch (err) {
+                console.error("AI Challenge generation failed, using fallback.", err);
+            }
+
+            if (aiSuggestion && habits.some(h => h.id === aiSuggestion.habitId)) {
+                console.log("Generated AI Challenge:", aiSuggestion);
+                const newChallenge: WeeklyChallenge = {
+                    id: crypto.randomUUID(),
+                    habitId: aiSuggestion.habitId,
+                    description: aiSuggestion.description,
+                    target: aiSuggestion.target,
+                    progress: 0,
+                    startDate: todayStr,
+                    isCompleted: false,
+                };
+                setWeeklyChallenge(newChallenge);
+            } else {
+                console.log("Using fallback random challenge generator.");
+                const randomHabit = habits[Math.floor(Math.random() * habits.length)];
+                const newChallenge: WeeklyChallenge = {
+                    id: crypto.randomUUID(),
+                    habitId: randomHabit.id,
+                    description: `Complete o hábito "${randomHabit.name}" 4 vezes esta semana!`,
+                    target: 4,
+                    progress: 0,
+                    startDate: todayStr,
+                    isCompleted: false,
+                };
+                setWeeklyChallenge(newChallenge);
+            }
         };
-        setWeeklyChallenge(newChallenge);
+        createChallenge();
     }
     
     // Check and generate daily quote
-    const todayStr = getTodayDateString(new Date());
-    if (user && isTourCompleted && motivationalQuote.date !== todayStr) {
+    if (motivationalQuote.date !== todayStr) {
         const latestMood = moodLogs.length > 0 ? moodLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
         generateMotivationalQuote(latestMood, habits, goals, habitLogs)
             .then(quote => {
@@ -107,7 +134,7 @@ const App: React.FC = () => {
             .catch(err => console.error("Failed to generate quote", err));
     }
 
-  }, [user, isTourCompleted]);
+  }, [user, isTourCompleted, habits, goals, moodLogs, habitLogs, weeklyChallenge, motivationalQuote.date]);
 
 
   const handleUserRegistration = (userData: User) => {
@@ -285,11 +312,6 @@ const App: React.FC = () => {
       <OnboardingTour
         user={user}
         onComplete={handleTourComplete}
-        addGoal={addGoal}
-        addHabit={addHabit}
-        addTask={addTask}
-        updateHealthData={updateHealthData}
-        addTransaction={addTransaction}
       />
     );
   }
@@ -332,7 +354,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen flex flex-col font-sans text-gray-800 dark:text-gray-100">
       {showMoodCheckin && <MoodCheckinModal onSubmit={addMoodLog} onClose={() => setShowMoodCheckin(false)} />}
       <main className="flex-grow pb-24">
         <div className="container mx-auto px-4 py-6">

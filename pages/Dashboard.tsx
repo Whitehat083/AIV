@@ -27,14 +27,14 @@ const Dashboard: React.FC<PageProps> = (props) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{getGreeting()}, {user.name}!</h1>
-        <p className="text-gray-500 dark:text-gray-400">Aqui está um resumo do seu dia.</p>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white">{getGreeting()}, {user.name}!</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Aqui está um resumo do seu dia.</p>
       </header>
       
       {/* Wellbeing Card */}
-       <Card className="bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
+       <Card className="bg-blue-500/10 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800">
           <div className="flex items-start space-x-4">
               <div className="flex-shrink-0">
                   <SparklesIcon className="w-8 h-8 text-blue-500 dark:text-blue-400"/>
@@ -44,21 +44,21 @@ const Dashboard: React.FC<PageProps> = (props) => {
                   <p className="text-blue-700 dark:text-blue-300 italic mt-1">"{motivationalQuote}"</p>
                   {weeklyChallenge && !weeklyChallenge.isCompleted && (
                       <div className="mt-3">
-                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-300">Desafio da Semana</p>
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wider">Desafio da Semana</p>
                           <div className="flex justify-between items-center text-sm mt-1">
                               <span className="font-medium">{habits.find(h => h.id === weeklyChallenge.habitId)?.name}</span>
                               <span className="font-bold">{weeklyChallenge.progress}/{weeklyChallenge.target}</span>
                           </div>
-                          <div className="w-full bg-blue-100 dark:bg-blue-800 rounded-full h-2 mt-1">
+                          <div className="w-full bg-blue-200/50 dark:bg-blue-800/50 rounded-full h-2 mt-1">
                               <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(weeklyChallenge.progress / weeklyChallenge.target) * 100}%` }}></div>
                           </div>
                       </div>
                   )}
                   <div className="mt-4 flex gap-2">
-                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
+                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800/50 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
                           Respirar
                       </button>
-                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
+                      <button onClick={() => setActivePage(Page.Wellbeing)} className="text-xs font-semibold bg-blue-100 dark:bg-blue-800/50 text-blue-700 dark:text-blue-200 px-3 py-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-700">
                           Ver Diário
                       </button>
                   </div>
@@ -75,7 +75,7 @@ const Dashboard: React.FC<PageProps> = (props) => {
                 <ul className="space-y-3">
                     {todayAppointments.slice(0, 3).map(app => (
                         <li key={app.id} className="flex items-start space-x-3">
-                            <div className={`${app.isReminder ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' : app.isTask ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'} font-semibold rounded-md px-2 py-1 text-sm`}>
+                            <div className={`${app.isReminder ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300' : app.isTask ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300' : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'} font-semibold rounded-md px-2 py-1 text-sm`}>
                                 {new Date(app.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                             <p className="text-gray-700 dark:text-gray-300">{app.title}</p>

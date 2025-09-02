@@ -108,11 +108,6 @@ export interface Badge {
 export interface OnboardingTourProps {
   user: User;
   onComplete: () => void;
-  addGoal: (goal: Omit<Goal, 'id' | 'currentProgress'>) => void;
-  addHabit: (habit: Omit<Habit, 'id'>) => void;
-  addTask: (task: Omit<Task, 'id' | 'completed'>) => void;
-  updateHealthData: (data: Partial<HealthData>) => void;
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
 }
 
 export interface PageProps {
