@@ -7,6 +7,7 @@ export enum Page {
   Goals = 'Metas',
   Wellbeing = 'Bem-Estar',
   Settings = 'Configurações',
+  SmartRoutine = 'Rotina Inteligente',
 }
 
 export interface Appointment {
@@ -110,6 +111,20 @@ export interface OnboardingTourProps {
   onComplete: () => void;
 }
 
+export interface RoutinePreferences {
+  startTime: string; // e.g., "08:00"
+  endTime: string;   // e.g., "22:00"
+  priorities: string[]; // e.g., ["Trabalho", "Saúde", "Estudos"]
+}
+
+export interface RoutineItem {
+  time: string; // e.g., "09:00"
+  title: string;
+  duration: number; // in minutes
+  type: 'appointment' | 'task' | 'habit' | 'break' | 'goal' | 'focus';
+  icon: string; // emoji or identifier for an icon
+}
+
 export interface PageProps {
   user: User;
   appointments: Appointment[];
@@ -149,4 +164,11 @@ export interface PageProps {
   deleteGoal: (goalId: string) => void;
 
   addMoodLog: (mood: Mood, notes?: string) => void;
+
+  // Smart Routine
+  smartRoutine: {
+    preferences: RoutinePreferences;
+    routine: RoutineItem[];
+  };
+  updateSmartRoutine: (data: Partial<{ preferences: RoutinePreferences; routine: RoutineItem[] }>) => void;
 }

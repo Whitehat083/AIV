@@ -8,6 +8,7 @@ import Finances from './pages/Finances';
 import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import Wellbeing from './pages/Wellbeing';
+import SmartRoutine from './pages/SmartRoutine';
 
 export const HomeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -68,11 +69,21 @@ export const Cog6ToothIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+export const WandIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.992.75.75 0 11.972.972A10.5 10.5 0 113.75 3.752.75.75 0 014.57 4.57z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.022 1.05c.422-.234.907-.354 1.407-.354a10.5 10.5 0 0110.5 10.5c0 .5-.12 1.01-.354 1.407M1.05 11.022c.234.422.354.907.354 1.407 0 5.798 4.702 10.5 10.5 10.5.5 0 1.01-.12 1.407-.354" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 7.5l2.25 2.25M18.75 9.75l-2.25-2.25M16.5 7.5V5.25m0 2.25H14.25m2.25 0l-2.25 2.25" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75l1.5 1.5M13.5 5.25l-1.5-1.5M12 3.75V1.5m0 2.25H9.75m2.25 0l-1.5 1.5M9 15l-1.5 1.5M7.5 16.5l1.5-1.5M9 15v2.25m0-2.25H6.75m2.25 0l1.5 1.5M18.75 12l1.5 1.5M20.25 13.5l-1.5-1.5M18.75 12v-2.25m0 2.25h2.25m-2.25 0l1.5-1.5" />
+    </svg>
+);
+
 
 export const NAV_ITEMS = [
   { id: Page.Dashboard, label: 'Home', icon: HomeIcon },
   { id: Page.Agenda, label: 'Agenda', icon: CalendarIcon },
   { id: Page.Tasks, label: 'Tarefas', icon: CheckCircleIcon },
+  { id: Page.SmartRoutine, label: 'Rotina', icon: WandIcon },
   { id: Page.Wellbeing, label: 'Bem-Estar', icon: SparklesIcon },
   { id: Page.Health, label: 'Saúde', icon: HeartIcon },
   { id: Page.Finances, label: 'Finanças', icon: BanknotesIcon },
@@ -88,6 +99,7 @@ export const PAGE_COMPONENTS = {
   [Page.Dashboard]: Dashboard,
   [Page.Agenda]: Agenda,
   [Page.Tasks]: TasksAndHabits,
+  [Page.SmartRoutine]: SmartRoutine,
   [Page.Health]: Health,
   [Page.Finances]: Finances,
   [Page.Goals]: Goals,

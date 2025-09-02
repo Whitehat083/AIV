@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood } from './types';
+import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
@@ -42,6 +42,14 @@ const App: React.FC = () => {
   const [badges, setBadges] = useState<Badge[]>(() => getInitialState('aiv-badges', []));
   const [motivationalQuote, setMotivationalQuote] = useState<{ quote: string, date: string }>(() => getInitialState('aiv-quote', { quote: 'Vamos fazer de hoje um ótimo dia!', date: '' }));
 
+  // Smart Routine State
+  const [smartRoutine, setSmartRoutine] = useState<{ preferences: RoutinePreferences; routine: RoutineItem[] }>(() => 
+    getInitialState('aiv-smartRoutine', { 
+      preferences: { startTime: '08:00', endTime: '22:00', priorities: ['Trabalho', 'Saúde', 'Estudos'] }, 
+      routine: [] 
+    })
+  );
+
 
   // Persist state to localStorage
   useEffect(() => {
@@ -59,7 +67,8 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-weeklyChallenge', JSON.stringify(weeklyChallenge));
     localStorage.setItem('aiv-badges', JSON.stringify(badges));
     localStorage.setItem('aiv-quote', JSON.stringify(motivationalQuote));
-  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote]);
+    localStorage.setItem('aiv-smartRoutine', JSON.stringify(smartRoutine));
+  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote, smartRoutine]);
   
   // Dark mode effect
   useEffect(() => {
@@ -273,6 +282,14 @@ const App: React.FC = () => {
     setShowMoodCheckin(false); // Hide modal after logging
   };
 
+  const updateSmartRoutine = (data: Partial<{ preferences: RoutinePreferences; routine: RoutineItem[] }>) => {
+    setSmartRoutine(prev => ({ 
+      ...prev, 
+      ...data,
+      preferences: { ...prev.preferences, ...data.preferences },
+    }));
+  };
+
 
   // Create daily reminders for ongoing goals to display on the agenda
   const generatedAppointments = useMemo(() => {
@@ -351,6 +368,8 @@ const App: React.FC = () => {
     updateGoal,
     deleteGoal,
     addMoodLog,
+    smartRoutine,
+    updateSmartRoutine,
   };
 
   return (
