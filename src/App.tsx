@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem, FixedAppointment } from './types';
+import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem, FixedAppointment, HealthLog } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
 import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
@@ -55,6 +55,7 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(() => getInitialState('aiv-transactions', []));
   const [goals, setGoals] = useState<Goal[]>(() => getInitialState('aiv-goals', []));
   const [healthData, setHealthData] = useState<HealthData>(() => getInitialState('aiv-healthData', { steps: 0, sleep: 0, water: 0 }));
+  const [healthLogs, setHealthLogs] = useState<HealthLog[]>(() => getInitialState('aiv-healthLogs', []));
   
   // Wellbeing Module State
   const [moodLogs, setMoodLogs] = useState<MoodLog[]>(() => getInitialState('aiv-moodLogs', []));
@@ -88,13 +89,14 @@ const App: React.FC = () => {
     localStorage.setItem('aiv-transactions', JSON.stringify(transactions));
     localStorage.setItem('aiv-goals', JSON.stringify(goals));
     localStorage.setItem('aiv-healthData', JSON.stringify(healthData));
+    localStorage.setItem('aiv-healthLogs', JSON.stringify(healthLogs));
     localStorage.setItem('aiv-moodLogs', JSON.stringify(moodLogs));
     localStorage.setItem('aiv-weeklyChallenge', JSON.stringify(weeklyChallenge));
     localStorage.setItem('aiv-badges', JSON.stringify(badges));
     localStorage.setItem('aiv-quote', JSON.stringify(motivationalQuote));
     localStorage.setItem('aiv-smartRoutine', JSON.stringify(smartRoutine));
     localStorage.setItem('aiv-fixedAppointments', JSON.stringify(fixedAppointments));
-  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, moodLogs, weeklyChallenge, badges, motivationalQuote, smartRoutine, fixedAppointments]);
+  }, [user, isTourCompleted, isDarkMode, appointments, tasks, habits, habitLogs, transactions, goals, healthData, healthLogs, moodLogs, weeklyChallenge, badges, motivationalQuote, smartRoutine, fixedAppointments]);
   
   // Dark mode effect
   useEffect(() => {
@@ -191,6 +193,7 @@ const App: React.FC = () => {
     setTransactions([]);
     setGoals([]);
     setHealthData({ steps: 0, sleep: 0, water: 0 });
+    setHealthLogs([]);
     setMoodLogs([]);
     setWeeklyChallenge(null);
     setBadges([]);
@@ -296,7 +299,19 @@ const App: React.FC = () => {
   };
 
   const updateHealthData = (data: Partial<HealthData>) => {
-    setHealthData(prev => ({ ...prev, ...data }));
+    const newHealthData = { ...healthData, ...data };
+    setHealthData(newHealthData);
+
+    // Also update today's log
+    const todayStr = getTodayDateString(new Date());
+    const existingLogIndex = healthLogs.findIndex(l => l.date === todayStr);
+    const newLog = { date: todayStr, ...newHealthData };
+
+    if (existingLogIndex > -1) {
+        setHealthLogs(logs => logs.map((log, index) => index === existingLogIndex ? newLog : log));
+    } else {
+        setHealthLogs(logs => [...logs, newLog]);
+    }
   };
 
   const addGoal = (goal: Omit<Goal, 'id' | 'currentProgress'>) => {
@@ -417,6 +432,7 @@ const App: React.FC = () => {
     transactions,
     goals,
     healthData,
+    healthLogs,
     moodLogs,
     weeklyChallenge,
     badges,

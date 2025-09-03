@@ -1,3 +1,5 @@
+import React from 'react';
+
 export enum Page {
   Dashboard = 'Dashboard',
   Agenda = 'Agenda',
@@ -11,7 +13,7 @@ export enum Page {
   SmartRoutine = 'Rotina Inteligente',
 }
 
-export type AiFeature = 'smartRoutine' | 'agenda' | 'wellbeing' | 'quote' | 'challenge';
+export type AiFeature = 'smartRoutine' | 'agenda' | 'wellbeing' | 'quote' | 'challenge' | 'finance' | 'health';
 
 export interface Recurrence {
   days: ('Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday')[];
@@ -98,6 +100,13 @@ export interface HealthData {
   water: number; // in liters
 }
 
+export interface HealthLog {
+  date: string; // YYYY-MM-DD
+  steps: number;
+  sleep: number;
+  water: number;
+}
+
 export interface User {
   name: string;
   dob: string;
@@ -158,6 +167,7 @@ export interface PageProps {
   transactions: Transaction[];
   goals: Goal[];
   healthData: HealthData;
+  healthLogs: HealthLog[];
   moodLogs: MoodLog[];
   weeklyChallenge: WeeklyChallenge | null;
   badges: Badge[];
