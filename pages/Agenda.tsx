@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageProps, RoutineItem, Appointment, FixedAppointment } from '../types';
 import Card from '../components/Card';
@@ -7,6 +5,7 @@ import Modal from '../components/Modal';
 import { generateAgendaSuggestions, AiAgendaResponse, getAppointmentSuggestions, AiAppointmentSuggestion } from '../services/geminiService';
 import { getTodayDateString, generateAppointmentsFromFixed } from '../utils/dateUtils';
 import { useDebounce } from '../hooks/useDebounce';
+import { UsageLimitError } from '../utils/errors';
 
 type ViewMode = 'day' | 'week' | 'month';
 
@@ -93,7 +92,7 @@ const processEventsForLayout = (items: ScheduleItem[]): LayoutItem[] => {
 
 
 const Agenda: React.FC<PageProps> = (props) => {
-  const { appointments, tasks, habits, goals, addAppointment, fixedAppointments } = props;
+  const { user, appointments, tasks, habits, goals, addAppointment, fixedAppointments, runAi, openUpgradeModal } = props;
   const [view, setView] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [aiData, setAiData] = useState<AiAgendaResponse | null>(null);
@@ -117,53 +116,60 @@ const Agenda: React.FC<PageProps> = (props) => {
     const fetchAiSuggestions = async () => {
         setIsLoading(true);
         try {
-            const pendingTasks = tasks.filter(t => !t.completed);
-            const dailyHabits = habits.filter(h => h.frequency === 'daily');
-
-            const suggestions = await generateAgendaSuggestions(dailyAppointments, pendingTasks, dailyHabits, goals);
-            setAiData(suggestions);
+            await runAi(async () => {
+              const pendingTasks = tasks.filter(t => !t.completed);
+              const dailyHabits = habits.filter(h => h.frequency === 'daily');
+              const suggestions = await generateAgendaSuggestions(dailyAppointments, pendingTasks, dailyHabits, goals);
+              setAiData(suggestions);
+            }, 'agenda');
         } catch (error) {
+            if(error instanceof UsageLimitError) return;
             console.error("Failed to fetch AI suggestions for agenda", error);
         } finally {
             setIsLoading(false);
         }
     };
-    if (view === 'day') {
+    if (view === 'day' && user.plan === 'premium') {
       fetchAiSuggestions();
     }
-  }, [currentDate, dailyAppointments, tasks, habits, goals, view]);
+  }, [currentDate, dailyAppointments, tasks, habits, goals, view, runAi, user.plan]);
   
   // Effect for new appointment contextual AI
   useEffect(() => {
     const getContextualSuggestions = async () => {
-        if (!isModalOpen) return;
+        if (!isModalOpen || user.plan !== 'premium') return;
         setIsAiLoading(true);
         
-        const suggestions = await getAppointmentSuggestions(
-            debouncedAppointment,
-            dailyAppointments,
-            habits,
-            tasks
-        );
-        setAiSuggestions(prev => ({...prev, ...suggestions}));
+        try {
+          await runAi(async () => {
+            const suggestions = await getAppointmentSuggestions(
+                debouncedAppointment,
+                dailyAppointments,
+                habits,
+                tasks
+            );
+            setAiSuggestions(prev => ({...prev, ...suggestions}));
 
-        // if optimal time was suggested, clear it after it's been fetched
-        if(suggestions.optimalTimeSuggestion) {
-            setAiSuggestions(current => ({...current, optimalTimeSuggestion: suggestions.optimalTimeSuggestion}))
-        } else {
-            // only clear conflict and travel if they were not in the new suggestion
-            setAiSuggestions(current => ({
-                optimalTimeSuggestion: current.optimalTimeSuggestion, // preserve existing suggestion
-                conflict: suggestions.conflict,
-                travelInfo: suggestions.travelInfo
-            }))
+            if(suggestions.optimalTimeSuggestion) {
+                setAiSuggestions(current => ({...current, optimalTimeSuggestion: suggestions.optimalTimeSuggestion}))
+            } else {
+                setAiSuggestions(current => ({
+                    optimalTimeSuggestion: current.optimalTimeSuggestion,
+                    conflict: suggestions.conflict,
+                    travelInfo: suggestions.travelInfo
+                }))
+            }
+          }, 'agenda');
+        } catch (error) {
+           if(error instanceof UsageLimitError) return;
+           console.error("Failed to get contextual suggestions", error);
+        } finally {
+          setIsAiLoading(false);
         }
-
-        setIsAiLoading(false);
     };
 
     getContextualSuggestions();
-  }, [debouncedAppointment, isModalOpen, dailyAppointments, habits, tasks]);
+  }, [debouncedAppointment, isModalOpen, dailyAppointments, habits, tasks, runAi, user.plan]);
 
   const handleOpenModal = () => {
     const defaultDate = new Date();
@@ -234,7 +240,7 @@ const Agenda: React.FC<PageProps> = (props) => {
             }
         });
 
-    const aiSchedule = aiData?.schedule.map((item, index) => {
+    const aiSchedule = (user.plan === 'premium' && aiData?.schedule.map((item, index) => {
         const [hours, minutes] = item.time.split(':');
         const itemDate = new Date(currentDate);
         itemDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
@@ -243,10 +249,10 @@ const Agenda: React.FC<PageProps> = (props) => {
             id: `ai-${index}-${item.time}`,
             date: itemDate,
         }
-    }) || [];
+    })) || [];
 
     return [...mappedAppointments, ...aiSchedule].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [dailyAppointments, aiData, currentDate]);
+  }, [dailyAppointments, aiData, currentDate, user.plan]);
 
   const handleDateChange = (amount: number) => {
       setCurrentDate(prev => {
@@ -375,7 +381,7 @@ const Agenda: React.FC<PageProps> = (props) => {
       {view === 'week' && <Card><div className="text-center p-10"><h3 className="font-semibold">Visão Semanal em breve!</h3></div></Card>}
       {view === 'month' && <Card><div className="text-center p-10"><h3 className="font-semibold">Visão Mensal em breve!</h3></div></Card>}
         
-      {view === 'day' && (
+      {view === 'day' && user.plan === 'premium' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
               <div className="flex items-center gap-3 mb-3">
@@ -384,7 +390,7 @@ const Agenda: React.FC<PageProps> = (props) => {
                 </div>
                 <h3 className="font-bold text-lg text-blue-700 dark:text-blue-300">Sugestão da IA</h3>
               </div>
-              {isLoading ? <div className="h-10 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div> : <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{aiData?.proactiveSuggestion.text}"</p>}
+              {isLoading ? <div className="h-10 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div> : <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{aiData?.proactiveSuggestion.text || 'Gere sugestões para ver insights aqui.'}"</p>}
           </Card>
           <Card>
             <div className="flex items-center gap-3 mb-3">
@@ -406,9 +412,21 @@ const Agenda: React.FC<PageProps> = (props) => {
           </Card>
         </div>
       )}
+
+      {view === 'day' && user.plan === 'free' && (
+        <Card>
+            <div className="text-center">
+                <h3 className="font-bold text-lg text-blue-700 dark:text-blue-300">✨ Desbloqueie a Agenda Inteligente</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Assinantes Premium recebem sugestões diárias, análise de horários e mais para otimizar o dia.</p>
+                <button onClick={openUpgradeModal} className="mt-4 bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">
+                    Fazer Upgrade
+                </button>
+            </div>
+        </Card>
+      )}
         
         {/* New Appointment Modal */}
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Compromisso Inteligente">
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Compromisso">
              <div className="space-y-4">
                 <div>
                     <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
@@ -429,10 +447,10 @@ const Agenda: React.FC<PageProps> = (props) => {
                     <input type="text" name="location" id="location" value={newAppointment.location} onChange={e => setNewAppointment(p => ({...p, location: e.target.value}))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" placeholder="Ex: Av. Paulista, 1000"/>
                 </div>
 
-                {isAiLoading && <div className="text-sm text-gray-500 text-center">IA analisando...</div>}
+                {user.plan === 'premium' && isAiLoading && <div className="text-sm text-gray-500 text-center">IA analisando...</div>}
 
                 {/* AI Suggestions Section */}
-                {!isAiLoading && (aiSuggestions.optimalTimeSuggestion || aiSuggestions.travelInfo || aiSuggestions.conflict) && (
+                {user.plan === 'premium' && !isAiLoading && (aiSuggestions.optimalTimeSuggestion || aiSuggestions.travelInfo || aiSuggestions.conflict) && (
                   <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-3">
                       <h3 className="font-semibold text-sm text-gray-600 dark:text-gray-300">Sugestões da IA</h3>
                       {aiSuggestions.optimalTimeSuggestion && (

@@ -9,6 +9,7 @@ import Settings from './pages/Settings';
 import Goals from './pages/Goals';
 import Wellbeing from './pages/Wellbeing';
 import SmartRoutine from './pages/SmartRoutine';
+import Motivation from './pages/Motivation';
 
 export const HomeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -88,6 +89,7 @@ export const NAV_ITEMS = [
   { id: Page.Health, label: 'Saúde', icon: HeartIcon },
   { id: Page.Finances, label: 'Finanças', icon: BanknotesIcon },
   { id: Page.Goals, label: 'Metas', icon: TargetIcon },
+  { id: Page.Motivation, label: 'Motivação', icon: SparklesIcon },
   { id: Page.Settings, label: 'Ajustes', icon: Cog6ToothIcon },
 ].sort((a,b) => { // Keep Settings last
     if(a.id === Page.Settings) return 1;
@@ -104,5 +106,6 @@ export const PAGE_COMPONENTS = {
   [Page.Finances]: Finances,
   [Page.Goals]: Goals,
   [Page.Wellbeing]: Wellbeing,
+  [Page.Motivation]: Motivation,
   [Page.Settings]: Settings,
 };

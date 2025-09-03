@@ -1,5 +1,5 @@
 import React from 'react';
-import { Page } from '../types';
+import { Page, User } from '../types';
 
 interface NavItem {
   id: Page;
@@ -8,12 +8,13 @@ interface NavItem {
 }
 
 interface BottomNavProps {
+  user: User;
   navItems: NavItem[];
   activePage: Page;
   setActivePage: (page: Page) => void;
 }
 
-const BottomNav: React.FC<BottomNavProps> = ({ navItems, activePage, setActivePage }) => {
+const BottomNav: React.FC<BottomNavProps> = ({ user, navItems, activePage, setActivePage }) => {
   return (
     <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-screen-sm bg-gray-900/60 dark:bg-black/50 backdrop-blur-lg rounded-2xl border border-white/10 shadow-2xl z-50">
       <div className="flex justify-around items-center p-2">
@@ -27,6 +28,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ navItems, activePage, setActivePa
               className={`relative flex flex-col items-center justify-center w-full py-2 text-xs sm:text-sm transition-all duration-300 rounded-xl ${
                 isActive
                   ? 'text-white'
+                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
                   : 'text-gray-400 hover:text-white'
               }`}
               aria-label={item.label}

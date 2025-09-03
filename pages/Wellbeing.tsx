@@ -5,6 +5,7 @@ import { getTodayDateString } from '../utils/dateUtils';
 import { getEmotionalInsights } from '../services/geminiService';
 import BreathingExercise from '../components/BreathingExercise';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { UsageLimitError } from '../utils/errors';
 
 const moods: { type: Mood; emoji: string; label: string }[] = [
   { type: 'happy', emoji: '😀', label: 'Feliz' },
@@ -31,7 +32,7 @@ const moodToValue = (mood: Mood): number => {
     }
 };
 
-const Wellbeing: React.FC<PageProps> = ({ weeklyChallenge, badges, addMoodLog, moodLogs }) => {
+const Wellbeing: React.FC<PageProps> = ({ user, weeklyChallenge, badges, addMoodLog, moodLogs, runAi, openUpgradeModal }) => {
   const [selectedMood, setSelectedMood] = useState<Mood | null>(null);
   const [notes, setNotes] = useState('');
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
@@ -43,13 +44,30 @@ const Wellbeing: React.FC<PageProps> = ({ weeklyChallenge, badges, addMoodLog, m
   const todaysLog = moodLogs.find(log => log.date === todayStr);
 
   useEffect(() => {
-    if (moodLogs.length > 2 && !insights) {
-      setIsLoadingInsights(true);
-      getEmotionalInsights(moodLogs)
-        .then(setInsights)
-        .finally(() => setIsLoadingInsights(false));
+    const fetchInsights = async () => {
+      if (moodLogs.length > 2 && !insights) {
+        setIsLoadingInsights(true);
+        try {
+            await runAi(async () => {
+                const result = await getEmotionalInsights(moodLogs);
+                setInsights(result);
+            }, 'wellbeing');
+        } catch(error) {
+            if (error instanceof UsageLimitError) {
+                setInsights("Você atingiu seu limite de IA. Faça upgrade para insights diários.");
+            } else {
+                 console.error("Error fetching emotional insights:", error);
+                 setInsights("Não foi possível carregar os insights no momento.");
+            }
+        } finally {
+            setIsLoadingInsights(false);
+        }
+      }
     }
-  }, [moodLogs, insights]);
+    if (user.plan === 'premium') {
+        fetchInsights();
+    }
+  }, [moodLogs, insights, runAi, user.plan]);
 
 
   const handleMoodSelect = (mood: Mood) => {
@@ -162,52 +180,61 @@ const Wellbeing: React.FC<PageProps> = ({ weeklyChallenge, badges, addMoodLog, m
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(128, 128, 128, 0.2)" />
                           <XAxis dataKey="name" />
                           <YAxis domain={[0, 5]} hide />
-                          <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4b5563' }}/>
-                          <Line type="monotone" dataKey="valor" stroke="#3b82f6" strokeWidth={2} name="Humor" />
+                          <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4b5563', borderRadius: '0.5rem' }}/>
+                          <Line type="monotone" dataKey="valor" name="Humor" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
                       </LineChart>
                   </ResponsiveContainer>
               </div>
           </Card>
-          <Card>
-              <h2 className="font-bold text-xl mb-4">Seus Insights com IA</h2>
-              {isLoadingInsights ? <p>Analisando seus padrões...</p> : <p className="text-gray-600 dark:text-gray-300 italic">"{insights}"</p>}
-          </Card>
+           <Card>
+                <h2 className="font-bold text-xl mb-4">Insights da IA</h2>
+                {isLoadingInsights ? (
+                    <div className="space-y-2">
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse"></div>
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 animate-pulse"></div>
+                    </div>
+                ) : (
+                    <p className="text-sm italic text-gray-600 dark:text-gray-300">
+                      {user.plan === 'premium' ? `"${insights || 'Continue registrando seu humor para receber insights.'}"` : (
+                          <>
+                              <span className="font-semibold not-italic">✨ Exclusivo para Premium</span><br/>
+                              Receba análises semanais sobre seus padrões de humor e dicas personalizadas para melhorar seu bem-estar.
+                              <button onClick={openUpgradeModal} className="mt-3 w-full bg-blue-100 text-blue-700 font-semibold py-2 px-4 rounded-lg hover:bg-blue-200 transition-colors">
+                                  Fazer Upgrade
+                              </button>
+                          </>
+                      )}
+                    </p>
+                )}
+            </Card>
       </div>
 
-      {weeklyChallenge && (
-        <Card>
-            <h2 className="font-bold text-xl mb-2">Desafio da Semana</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{weeklyChallenge.description}</p>
-            <div className="flex justify-between items-center mb-1">
-                <span className="text-sm font-medium">Progresso</span>
-                <span className="text-sm font-semibold">{weeklyChallenge.progress} / {weeklyChallenge.target}</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-              <div className="bg-green-500 h-4 rounded-full text-center text-white text-xs flex items-center justify-center" style={{ width: `${(weeklyChallenge.progress / weeklyChallenge.target) * 100}%` }}>
-                 <span>{Math.round((weeklyChallenge.progress / weeklyChallenge.target) * 100)}%</span>
-              </div>
-            </div>
-            {weeklyChallenge.isCompleted && <p className="text-green-600 dark:text-green-400 font-semibold text-center mt-3">Desafio Concluído! 🎉</p>}
-        </Card>
-      )}
-
-      <Card>
-          <h2 className="font-bold text-xl mb-4">Minhas Conquistas</h2>
-          {badges.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {badges.map(badge => (
-                    <div key={badge.id} className="text-center p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/50">
-                        <TrophyIcon className="w-12 h-12 mx-auto text-yellow-500"/>
-                        <p className="text-sm font-semibold mt-2">{badge.name}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(badge.dateEarned).toLocaleDateString('pt-BR')}</p>
+       <Card>
+            <h2 className="font-bold text-xl mb-4">Conquistas & Desafios</h2>
+            {weeklyChallenge && (
+                <div className="mb-4">
+                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wider">Desafio da Semana</p>
+                    <div className="mt-1 p-3 bg-blue-50 dark:bg-blue-900/50 rounded-lg">
+                        <p className="font-medium text-blue-800 dark:text-blue-200">{weeklyChallenge.description}</p>
+                        <div className="w-full bg-blue-200/50 dark:bg-blue-800/50 rounded-full h-2 mt-2">
+                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(weeklyChallenge.progress / weeklyChallenge.target) * 100}%` }}></div>
+                        </div>
                     </div>
-                ))}
+                </div>
+            )}
+            <div>
+                <p className="text-sm font-semibold text-yellow-600 dark:text-yellow-300 uppercase tracking-wider">Badges Conquistados</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                    {badges.length > 0 ? badges.map(badge => (
+                        <div key={badge.id} className="flex items-center gap-2 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 px-3 py-1 rounded-full">
+                            <TrophyIcon className="w-4 h-4" />
+                            <span className="text-xs font-bold">{badge.name}</span>
+                        </div>
+                    )) : <p className="text-xs text-gray-500">Nenhum badge conquistado ainda.</p>}
+                </div>
             </div>
-          ) : (
-             <p className="text-center text-gray-500 dark:text-gray-400">Complete desafios para ganhar badges!</p>
-          )}
+        </Card>
 
-      </Card>
     </div>
   );
 };

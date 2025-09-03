@@ -5,15 +5,33 @@ import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
 import OnboardingTour from './pages/OnboardingTour';
 import MoodCheckinModal from './components/MoodCheckinModal';
+import UpgradeModal from './components/UpgradeModal';
 import { getTodayDateString } from './utils/dateUtils';
 import { generateMotivationalQuote, generateWeeklyChallenge } from './services/geminiService';
+import { useAi } from './hooks/useAi';
+import { UsageLimitError } from './utils/errors';
 
 const App: React.FC = () => {
   // Helper to get state from localStorage
   const getInitialState = <T,>(key: string, defaultValue: T): T => {
     try {
       const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+      if (item) {
+        const parsed = JSON.parse(item);
+        // Migration for existing users
+        if (key === 'aiv-user' && parsed) {
+            if (parsed.aiUses || !('smartRoutineUses' in parsed)) {
+                 return {
+                    ...parsed,
+                    plan: parsed.plan || 'free',
+                    smartRoutineUses: 0, // Reset for all users on migration
+                    aiUses: undefined,
+                } as unknown as T;
+            }
+        }
+        return parsed;
+      }
+      return defaultValue;
     } catch (error) {
       console.warn(`Error reading localStorage key “${key}”:`, error);
       return defaultValue;
@@ -26,6 +44,8 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => getInitialState('aiv-isDarkMode', false));
   const [activePage, setActivePage] = useState<Page>(Page.Dashboard);
   const [showMoodCheckin, setShowMoodCheckin] = useState<boolean>(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState<boolean>(false);
+
 
   // Data State
   const [appointments, setAppointments] = useState<Appointment[]>(() => getInitialState('aiv-appointments', []));
@@ -53,6 +73,8 @@ const App: React.FC = () => {
   // Fixed Appointments State
   const [fixedAppointments, setFixedAppointments] = useState<FixedAppointment[]>(() => getInitialState('aiv-fixedAppointments', []));
 
+  // AI Usage Hook
+  const { runAi, smartRoutineUses } = useAi(user, setUser, () => setIsUpgradeModalOpen(true));
 
   // Persist state to localStorage
   useEffect(() => {
@@ -82,33 +104,19 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
-  
-  // --- Wellbeing Module Effects ---
-  useEffect(() => {
-    if (!user || !isTourCompleted) return;
+
+  const fetchAiFeatures = useCallback(async () => {
+    if (!user || !isTourCompleted || user.plan !== 'premium') return;
 
     const todayStr = getTodayDateString(new Date());
 
-    // Show mood check-in once per day
-    const hasLoggedToday = moodLogs.some(log => log.date === todayStr);
-    if (!hasLoggedToday) {
-        setShowMoodCheckin(true);
-    }
-
     // Check and generate weekly challenge
     const shouldGenerateChallenge = habits.length > 0 && (!weeklyChallenge || (new Date().getDay() === 1 && weeklyChallenge.startDate !== todayStr));
-    
     if (shouldGenerateChallenge) {
-        const createChallenge = async () => {
-            let aiSuggestion = null;
-            try {
-                aiSuggestion = await generateWeeklyChallenge(habits, goals, moodLogs);
-            } catch (err) {
-                console.error("AI Challenge generation failed, using fallback.", err);
-            }
-
+      try {
+        await runAi(async () => {
+            const aiSuggestion = await generateWeeklyChallenge(habits, goals, moodLogs);
             if (aiSuggestion && habits.some(h => h.id === aiSuggestion.habitId)) {
-                console.log("Generated AI Challenge:", aiSuggestion);
                 const newChallenge: WeeklyChallenge = {
                     id: crypto.randomUUID(),
                     habitId: aiSuggestion.habitId,
@@ -120,38 +128,61 @@ const App: React.FC = () => {
                 };
                 setWeeklyChallenge(newChallenge);
             } else {
-                console.log("Using fallback random challenge generator.");
-                const randomHabit = habits[Math.floor(Math.random() * habits.length)];
-                const newChallenge: WeeklyChallenge = {
-                    id: crypto.randomUUID(),
-                    habitId: randomHabit.id,
-                    description: `Complete o hábito "${randomHabit.name}" 4 vezes esta semana!`,
-                    target: 4,
-                    progress: 0,
-                    startDate: todayStr,
-                    isCompleted: false,
-                };
-                setWeeklyChallenge(newChallenge);
+                throw new Error("AI suggestion failed or invalid.");
             }
-        };
-        createChallenge();
+        }, 'challenge');
+      } catch (err) {
+          console.error("AI Challenge generation failed, using fallback.", err);
+          const randomHabit = habits[Math.floor(Math.random() * habits.length)];
+          const newChallenge: WeeklyChallenge = {
+              id: crypto.randomUUID(),
+              habitId: randomHabit.id,
+              description: `Complete o hábito "${randomHabit.name}" 4 vezes esta semana!`,
+              target: 4,
+              progress: 0,
+              startDate: todayStr,
+              isCompleted: false,
+          };
+          setWeeklyChallenge(newChallenge);
+      }
     }
     
     // Check and generate daily quote
     if (motivationalQuote.date !== todayStr) {
-        const latestMood = moodLogs.length > 0 ? moodLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
-        generateMotivationalQuote(latestMood, habits, goals, habitLogs)
-            .then(quote => {
-                setMotivationalQuote({ quote, date: todayStr });
-            })
-            .catch(err => console.error("Failed to generate quote", err));
+       try {
+          await runAi(async () => {
+              const latestMood = moodLogs.length > 0 ? moodLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
+              const quote = await generateMotivationalQuote(latestMood, habits, goals, habitLogs);
+              setMotivationalQuote({ quote, date: todayStr });
+          }, 'quote');
+       } catch (err) {
+          console.error("Failed to generate quote", err)
+       }
     }
+  }, [user, isTourCompleted, habits, goals, moodLogs, habitLogs, weeklyChallenge, motivationalQuote.date, runAi]);
+  
+  useEffect(() => {
+    // Show mood check-in once per day regardless of plan
+    if (user && isTourCompleted) {
+        const todayStr = getTodayDateString(new Date());
+        const hasLoggedToday = moodLogs.some(log => log.date === todayStr);
+        if (!hasLoggedToday) {
+            setShowMoodCheckin(true);
+        }
+    }
+    // Fetch AI features only for premium users
+    if (user?.plan === 'premium') {
+        fetchAiFeatures();
+    }
+  }, [user, isTourCompleted, moodLogs, fetchAiFeatures]);
 
-  }, [user, isTourCompleted, habits, goals, moodLogs, habitLogs, weeklyChallenge, motivationalQuote.date]);
 
-
-  const handleUserRegistration = (userData: User) => {
-    setUser(userData);
+  const handleUserRegistration = (userData: Omit<User, 'plan' | 'smartRoutineUses'>) => {
+    setUser({
+        ...userData,
+        plan: 'free',
+        smartRoutineUses: 0,
+    });
     // Clear all data to ensure a fresh start for the tour
     setAppointments([]);
     setTasks([]);
@@ -173,6 +204,13 @@ const App: React.FC = () => {
   const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => !prev);
   }, []);
+
+  const handleUpgrade = () => {
+    // This would redirect to Stripe in a real app
+    alert("Redirecionando para a página de pagamento... (simulação)");
+    setUser(prev => prev ? ({ ...prev, plan: 'premium' }) : null);
+    setIsUpgradeModalOpen(false);
+  }
 
   // CRUD Operations
   const addAppointment = (appointment: Omit<Appointment, 'id'>) => {
@@ -412,17 +450,23 @@ const App: React.FC = () => {
     addFixedAppointment,
     updateFixedAppointment,
     deleteFixedAppointment,
+    // Premium features
+    runAi,
+    smartRoutineUses,
+    setUser,
+    openUpgradeModal: () => setIsUpgradeModalOpen(true),
   };
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-gray-800 dark:text-gray-100">
       {showMoodCheckin && <MoodCheckinModal onSubmit={addMoodLog} onClose={() => setShowMoodCheckin(false)} />}
+      <UpgradeModal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} onUpgrade={handleUpgrade} />
       <main className="flex-grow pb-24">
         <div className="container mx-auto px-4 py-6">
           <ActivePageComponent {...pageProps} />
         </div>
       </main>
-      <BottomNav navItems={NAV_ITEMS} activePage={activePage} setActivePage={setActivePage} />
+      <BottomNav user={user} navItems={NAV_ITEMS} activePage={activePage} setActivePage={setActivePage} />
     </div>
   );
 };

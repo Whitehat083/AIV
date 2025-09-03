@@ -1,7 +1,5 @@
-
-
 import React, { useState } from 'react';
-import { PageProps, FixedAppointment } from '../types';
+import { PageProps, FixedAppointment, User } from '../types';
 import Card from '../components/Card';
 import FixedAppointmentModal from '../components/FixedAppointmentModal';
 
@@ -27,7 +25,7 @@ const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 
 const Settings: React.FC<PageProps> = (props) => {
-  const { user, isDarkMode, toggleDarkMode, fixedAppointments, addFixedAppointment, updateFixedAppointment, deleteFixedAppointment } = props;
+  const { user, isDarkMode, toggleDarkMode, fixedAppointments, addFixedAppointment, updateFixedAppointment, deleteFixedAppointment, openUpgradeModal, setUser } = props;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<FixedAppointment | null>(null);
 
@@ -41,13 +39,22 @@ const Settings: React.FC<PageProps> = (props) => {
     setIsModalOpen(true);
   };
 
-  // FIX: Removed explicit `Record<string, string>` to allow TypeScript to infer literal types for keys.
-  // This corrects the type of `day` in the `.filter()` call on line 88, fixing a type mismatch.
   const dayAbbreviations = {
       Sunday: 'Dom', Monday: 'Seg', Tuesday: 'Ter', Wednesday: 'Qua',
       Thursday: 'Qui', Friday: 'Sex', Saturday: 'Sáb'
   };
   const weekOrder: (keyof typeof dayAbbreviations)[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  const handleManageSubscription = () => {
+      // In a real app, this would redirect to the Stripe Customer Portal
+      alert("Redirecionando para o portal de assinaturas... (simulação)");
+  };
+  
+  const handleDowngrade = () => {
+      if (confirm("Tem certeza que deseja voltar para o plano gratuito? Você perderá o acesso ilimitado à IA.")) {
+        setUser((prevUser: User | null) => prevUser ? {...prevUser, plan: 'free'} : null);
+      }
+  }
 
 
   return (
@@ -69,6 +76,34 @@ const Settings: React.FC<PageProps> = (props) => {
             <ToggleSwitch checked={true} onChange={() => {}} />
           </li>
         </ul>
+      </Card>
+
+       <Card>
+        <h2 className="font-bold text-xl mb-4">Meu Plano</h2>
+        <div className="p-4 bg-blue-50 dark:bg-blue-900/50 rounded-lg text-center">
+            {user.plan === 'free' ? (
+                <>
+                    <p className="font-semibold text-blue-800 dark:text-blue-200">Você está no plano <span className="font-bold">Gratuito</span>.</p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mt-1"> Obtenha usos ilimitados da IA e mais!</p>
+                    <button onClick={openUpgradeModal} className="mt-3 bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">
+                        Fazer Upgrade para Premium
+                    </button>
+                </>
+            ) : (
+                 <>
+                    <p className="font-semibold text-green-800 dark:text-green-200">Você está no plano <span className="font-bold">Premium</span> ✨</p>
+                    <p className="text-sm text-green-700 dark:text-green-300 mt-1">Aproveite todos os benefícios da IA ilimitada!</p>
+                    <div className="mt-3 flex justify-center gap-2">
+                        <button onClick={handleManageSubscription} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors">
+                            Gerenciar Assinatura
+                        </button>
+                         <button onClick={handleDowngrade} className="text-sm text-gray-500 hover:underline">
+                            Voltar para o plano gratuito
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
       </Card>
 
       <Card>
@@ -124,16 +159,6 @@ const Settings: React.FC<PageProps> = (props) => {
             <ToggleSwitch checked={false} onChange={() => {}} />
           </li>
         </ul>
-      </Card>
-
-      <Card>
-        <h2 className="font-bold text-xl mb-4">Conta</h2>
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/50 rounded-lg text-center">
-          <p className="font-semibold text-blue-800 dark:text-blue-200">Você está no plano Gratuito.</p>
-          <button className="mt-2 bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">
-            Fazer Upgrade para Premium
-          </button>
-        </div>
       </Card>
 
        <FixedAppointmentModal 

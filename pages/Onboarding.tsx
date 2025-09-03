@@ -3,7 +3,7 @@ import { User } from '../types';
 import Card from '../components/Card';
 
 interface OnboardingProps {
-  onRegister: (user: User) => void;
+  onRegister: (user: Omit<User, 'plan' | 'smartRoutineUses'>) => void;
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ onRegister }) => {

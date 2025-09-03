@@ -4,9 +4,14 @@ import Card from '../components/Card';
 import { generateSmartRoutine, resolveRoutineConflicts, ResolvedRoutineItem } from '../services/geminiService';
 import RoutineConfirmationModal from '../components/RoutineConfirmationModal';
 import { getTodayDateString } from '../utils/dateUtils';
+import { UsageLimitError } from '../utils/errors';
+import AiUsageIndicator from '../components/AiUsageIndicator';
+
+const SMART_ROUTINE_LIMIT = 2;
 
 const SmartRoutine: React.FC<PageProps> = (props) => {
     const { 
+        user,
         smartRoutine, 
         updateSmartRoutine,
         appointments,
@@ -15,6 +20,8 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
         goals,
         moodLogs,
         syncRoutineToAgenda,
+        runAi,
+        smartRoutineUses
     } = props;
 
     const [preferences, setPreferences] = useState<RoutinePreferences>(smartRoutine.preferences);
@@ -43,21 +50,27 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
         setIsLoading(true);
         setError(null);
         try {
-            const latestMood = moodLogs.length > 0 ? moodLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
-            const pendingTasks = tasks.filter(t => !t.completed);
-            
-            const today = new Date();
-            const todayAppointments = appointments.filter(a => new Date(a.date).toDateString() === today.toDateString());
-            
-            const newRoutine = await generateSmartRoutine(preferences, todayAppointments, pendingTasks, habits, goals, latestMood);
-            updateSmartRoutine({ routine: newRoutine });
+            await runAi(async () => {
+                const latestMood = moodLogs.length > 0 ? moodLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
+                const pendingTasks = tasks.filter(t => !t.completed);
+                
+                const today = new Date();
+                const todayAppointments = appointments.filter(a => new Date(a.date).toDateString() === today.toDateString());
+                
+                const newRoutine = await generateSmartRoutine(preferences, todayAppointments, pendingTasks, habits, goals, latestMood);
+                updateSmartRoutine({ routine: newRoutine });
+            }, 'smartRoutine');
         } catch (err) {
+            if (err instanceof UsageLimitError) {
+                // The hook already opens the modal
+                return;
+            }
             console.error("Failed to generate routine:", err);
             setError("Não foi possível gerar a rotina. A IA pode estar sobrecarregada. Tente novamente mais tarde.");
         } finally {
             setIsLoading(false);
         }
-    }, [preferences, appointments, tasks, habits, goals, moodLogs, updateSmartRoutine]);
+    }, [preferences, appointments, tasks, habits, goals, moodLogs, updateSmartRoutine, runAi]);
     
     const handleClearRoutine = () => {
         updateSmartRoutine({ routine: [] });
@@ -67,15 +80,17 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
         setIsSyncing(true);
         setError(null);
         try {
-            const today = new Date();
-            const todayStr = getTodayDateString(today);
-            const todayAppointments = appointments.filter(a => getTodayDateString(new Date(a.date)) === todayStr);
+            await runAi(async () => {
+                const today = new Date();
+                const todayStr = getTodayDateString(today);
+                const todayAppointments = appointments.filter(a => getTodayDateString(new Date(a.date)) === todayStr);
 
-            const resolved = await resolveRoutineConflicts(smartRoutine.routine, todayAppointments);
-            setResolvedRoutine(resolved);
-            setIsConfirmModalOpen(true);
-
+                const resolved = await resolveRoutineConflicts(smartRoutine.routine, todayAppointments);
+                setResolvedRoutine(resolved);
+                setIsConfirmModalOpen(true);
+            }, 'smartRoutine');
         } catch (err) {
+             if (err instanceof UsageLimitError) return;
              setError("Não foi possível verificar os conflitos da agenda. Por favor, tente novamente.");
         } finally {
             setIsSyncing(false);
@@ -112,6 +127,13 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
                     <Card>
                         <h2 className="text-xl font-bold mb-4">Gerar Planejamento</h2>
                         <p className="text-gray-600 dark:text-gray-300 mb-6">Com base em seus compromissos, tarefas, metas e preferências, a IA criará uma rotina otimizada para hoje. Certifique-se de que suas preferências abaixo estão corretas.</p>
+                        
+                        {user.plan === 'free' && (
+                            <div className="mb-4">
+                                <AiUsageIndicator uses={smartRoutineUses} limit={SMART_ROUTINE_LIMIT} featureName="Gerações de Rotina" />
+                            </div>
+                        )}
+
                         <button 
                             onClick={handleGenerateRoutine} 
                             disabled={isLoading}
@@ -119,7 +141,7 @@ const SmartRoutine: React.FC<PageProps> = (props) => {
                         >
                              {isLoading ? (
                                 <>
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>

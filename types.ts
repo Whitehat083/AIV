@@ -6,9 +6,12 @@ export enum Page {
   Finances = 'Finanças',
   Goals = 'Metas',
   Wellbeing = 'Bem-Estar',
+  Motivation = 'Motivação',
   Settings = 'Configurações',
   SmartRoutine = 'Rotina Inteligente',
 }
+
+export type AiFeature = 'smartRoutine' | 'agenda' | 'wellbeing' | 'quote' | 'challenge';
 
 export interface Recurrence {
   days: ('Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday')[];
@@ -98,6 +101,8 @@ export interface HealthData {
 export interface User {
   name: string;
   dob: string;
+  plan: 'free' | 'premium';
+  smartRoutineUses: number;
 }
 
 export type Mood = 'happy' | 'neutral' | 'sad' | 'tired' | 'stressed';
@@ -197,4 +202,10 @@ export interface PageProps {
   addFixedAppointment: (appointment: Omit<FixedAppointment, 'id'>) => void;
   updateFixedAppointment: (appointment: FixedAppointment) => void;
   deleteFixedAppointment: (appointmentId: string) => void;
+
+  // Premium Features
+  runAi: <T>(aiCallback: () => Promise<T>, feature: AiFeature) => Promise<T | void>;
+  smartRoutineUses: number;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  openUpgradeModal: () => void;
 }
