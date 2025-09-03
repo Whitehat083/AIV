@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { PageProps, RoutinePreferences, RoutineItem } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 import { generateSmartRoutine, resolveRoutineConflicts, ResolvedRoutineItem } from '../services/geminiService';
-import RoutineConfirmationModal from '../../components/RoutineConfirmationModal';
+import RoutineConfirmationModal from '../components/RoutineConfirmationModal';
 import { getTodayDateString } from '../utils/dateUtils';
 import { UsageLimitError } from '../utils/errors';
-import AiUsageIndicator from '../../components/AiUsageIndicator';
+import AiUsageIndicator from '../components/AiUsageIndicator';
 
 const SMART_ROUTINE_LIMIT = 2;
 

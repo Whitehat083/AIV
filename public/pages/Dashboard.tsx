@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page, PageProps } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 import { getTodayDateString } from '../utils/dateUtils';
 import { SparklesIcon } from '../constants';
 

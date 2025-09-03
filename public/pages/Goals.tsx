@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PageProps, Goal } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 
 const GoalCard: React.FC<{ goal: Goal; onUpdate: (id: string, progress: number) => void; onDelete: (id: string) => void; }> = ({ goal, onUpdate, onDelete }) => {
   const [progress, setProgress] = useState(goal.currentProgress);

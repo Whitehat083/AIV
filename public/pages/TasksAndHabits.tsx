@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { PageProps, Task, Habit } from '../types';
-import Card from '../../components/Card';
-import Modal from '../../components/Modal';
+import Card from '../components/Card';
+import Modal from '../components/Modal';
 import { getTodayDateString } from '../utils/dateUtils';
 
 type ActiveTab = 'tasks' | 'habits' | 'stats';

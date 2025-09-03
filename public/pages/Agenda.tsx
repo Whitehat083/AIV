@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageProps, RoutineItem, Appointment, FixedAppointment } from '../types';
-import Card from '../../components/Card';
-import Modal from '../../components/Modal';
+import Card from '../components/Card';
+import Modal from '../components/Modal';
 import { generateAgendaSuggestions, AiAgendaResponse, getAppointmentSuggestions, AiAppointmentSuggestion } from '../services/geminiService';
 import { getTodayDateString, generateAppointmentsFromFixed } from '../utils/dateUtils';
 import { useDebounce } from '../hooks/useDebounce';

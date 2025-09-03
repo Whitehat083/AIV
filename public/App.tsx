@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Page, Appointment, Task, Habit, Transaction, Goal, HealthData, User, HabitLog, MoodLog, WeeklyChallenge, Badge, Mood, RoutinePreferences, RoutineItem, FixedAppointment } from './types';
 import { PAGE_COMPONENTS, NAV_ITEMS } from './constants';
-import BottomNav from '../components/BottomNav';
+import BottomNav from './components/BottomNav';
 import Onboarding from './pages/Onboarding';
 import OnboardingTour from './pages/OnboardingTour';
-import MoodCheckinModal from '../components/MoodCheckinModal';
-import UpgradeModal from '../components/UpgradeModal';
+import MoodCheckinModal from './components/MoodCheckinModal';
+import UpgradeModal from './components/UpgradeModal';
 import { getTodayDateString } from './utils/dateUtils';
 import { generateMotivationalQuote, generateWeeklyChallenge } from './services/geminiService';
 import { useAi } from './hooks/useAi';

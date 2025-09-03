@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { PageProps, HealthData } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const healthChartData = [

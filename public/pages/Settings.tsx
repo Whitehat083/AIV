@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PageProps, FixedAppointment, User } from '../types';
-import Card from '../../components/Card';
-import FixedAppointmentModal from '../../components/FixedAppointmentModal';
+import Card from '../components/Card';
+import FixedAppointmentModal from '../components/FixedAppointmentModal';
 
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => {
   return (

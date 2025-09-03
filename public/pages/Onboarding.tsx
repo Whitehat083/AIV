@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 
 interface OnboardingProps {
   onRegister: (user: Omit<User, 'plan' | 'smartRoutineUses'>) => void;

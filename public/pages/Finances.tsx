@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PageProps, Transaction } from '../types';
-import Card from '../../components/Card';
-import Modal from '../../components/Modal';
+import Card from '../components/Card';
+import Modal from '../components/Modal';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];

@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { PageProps, Mood, MoodLog } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 import { getTodayDateString } from '../utils/dateUtils';
 import { getEmotionalInsights } from '../services/geminiService';
-import BreathingExercise from '../../components/BreathingExercise';
+import BreathingExercise from '../components/BreathingExercise';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { UsageLimitError } from '../utils/errors';
 

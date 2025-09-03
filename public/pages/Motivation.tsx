@@ -1,6 +1,6 @@
 import React from 'react';
 import { PageProps } from '../types';
-import Card from '../../components/Card';
+import Card from '../components/Card';
 import { SparklesIcon } from '../constants';
 
 const Motivation: React.FC<PageProps> = ({ user }) => {
