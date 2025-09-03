@@ -74,8 +74,13 @@ const App: React.FC = () => {
   // Fixed Appointments State
   const [fixedAppointments, setFixedAppointments] = useState<FixedAppointment[]>(() => getInitialState('aiv-fixedAppointments', []));
 
+  // Memoized function to prevent re-renders
+  const openUpgradeModal = useCallback(() => {
+    setIsUpgradeModalOpen(true);
+  }, []);
+
   // AI Usage Hook
-  const { runAi, smartRoutineUses } = useAi(user, setUser, () => setIsUpgradeModalOpen(true));
+  const { runAi, smartRoutineUses } = useAi(user, setUser, openUpgradeModal);
 
   // Persist state to localStorage
   useEffect(() => {
@@ -470,7 +475,7 @@ const App: React.FC = () => {
     runAi,
     smartRoutineUses,
     setUser,
-    openUpgradeModal: () => setIsUpgradeModalOpen(true),
+    openUpgradeModal: openUpgradeModal,
   };
 
   return (

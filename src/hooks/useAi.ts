@@ -1,3 +1,5 @@
+
+import React, { useCallback } from 'react';
 import { User, AiFeature } from '../types';
 import { UsageLimitError } from '../utils/errors';
 
@@ -9,7 +11,7 @@ export const useAi = (
     openUpgradeModal: () => void
 ) => {
 
-    const runAi = async <T>(aiCallback: () => Promise<T>, feature: AiFeature): Promise<T | void> => {
+    const runAi = useCallback(async <T>(aiCallback: () => Promise<T>, feature: AiFeature): Promise<T | void> => {
         if (!user) {
             throw new Error("User not found");
         }
@@ -51,7 +53,7 @@ export const useAi = (
             openUpgradeModal();
             throw new UsageLimitError(`Feature '${feature}' is only available for premium users.`);
         }
-    };
+    }, [user, setUser, openUpgradeModal]);
 
     return { runAi, smartRoutineUses: user?.smartRoutineUses ?? 0 };
 };
